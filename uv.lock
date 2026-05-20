@@ -44,6 +44,9 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "faster-whisper" },
     { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-multipart" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -51,6 +54,9 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.1" },
     { name = "faster-whisper", specifier = ">=1.2.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pydantic-settings", specifier = ">=2.14.1" },
+    { name = "python-multipart", specifier = ">=0.0.29" },
+    { name = "uvicorn", specifier = ">=0.47.0" },
 ]
 
 [[package]]
