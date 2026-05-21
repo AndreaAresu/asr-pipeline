@@ -22,9 +22,13 @@ class Job(Base):
         return f"Job(id={self.id}, status={self.status}, created_at={self.created_at})"
     
 class Transcript(Base):
+    __tablename__ = "transcripts"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     job_id: Mapped[str] = mapped_column(String, ForeignKey('jobs.id'))
     full_text: Mapped[str] = mapped_column(String)
     language: Mapped[str | None] = mapped_column(String)
     word_timestamps: Mapped[dict] = mapped_column(JSON)
+
+    def __repr__(self) -> str:
+        return f"Transcript(id={self.id}, job_id={self.job_id}, language={self.language})"
 

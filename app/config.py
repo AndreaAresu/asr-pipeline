@@ -6,7 +6,7 @@ module-level `settings` instance rather than instantiating `Settings`
 directly, so values are loaded once per process.
 """
 
-from pydantic import Field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,8 +21,30 @@ class Settings(BaseSettings):
         default="/tmp/asr-pipeline",
         description="Directory where uploaded audio files are buffered during transcription.",
     )
+    postgres_user: str = Field(description="Postgres role used by the application.")
+    postgres_password: str = Field(description="Password for `postgres_user`.")
+    postgres_db: str = Field(description="Database name on the Postgres instance.")
+    postgres_host: str = Field(
+        default="localhost", 
+        description="Postgres hostname."
+    )
+    postgres_port: int = Field(
+        default=5432, 
+        description="Postgres TCP port."
+    )
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()
+
+
+
+    
