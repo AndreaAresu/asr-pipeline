@@ -25,14 +25,15 @@ class Settings(BaseSettings):
     postgres_password: str = Field(description="Password for `postgres_user`.")
     postgres_db: str = Field(description="Database name on the Postgres instance.")
     postgres_host: str = Field(
-        default="localhost", 
-        description="Postgres hostname."
+        default="localhost",
+        description="Postgres hostname.",
     )
     postgres_port: int = Field(
-        default=5432, 
-        description="Postgres TCP port."
+        default=5432,
+        description="Postgres TCP port.",
     )
-    @computed_field
+
+    @computed_field(description="SQLAlchemy URL built from the postgres_* fields; uses the psycopg (v3) driver.")
     @property
     def database_url(self) -> str:
         return (
@@ -44,7 +45,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-
-
-    
