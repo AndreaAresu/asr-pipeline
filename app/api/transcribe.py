@@ -1,45 +1,44 @@
-"""HTTP routes for audio transcription.
+"""HTTP route that enqueues a transcription job.
 
-Exposes the `/transcribe` endpoint, which accepts an uploaded audio or
-video file, transcribes it through the shared `ASRModel` instance stored
-on `app.state`, and returns a structured JSON result.
+Accepts an uploaded audio or video file, persists a `Job` row with
+status `queued`, pushes the work onto the `transcribe` RQ queue, and
+returns the job id so the client can poll `/jobs/{id}` for status and
+`/jobs/{id}/result` for the final transcription.
 """
 
-import os
 import uuid
 
-from fastapi import APIRouter, UploadFile, Request, HTTPException
+from fastapi import APIRouter, UploadFile, HTTPException
 from redis import Redis
 from rq import Queue
+
 from app.workers.transcribe_worker import transcribe_job
 from app.db.session import SessionLocal
 from app.db.models import Job
 from app.config import settings
 
+
 router = APIRouter()
 _redis = Redis.from_url(settings.redis_url)
-_queue = Queue('transcribe', connection=_redis)
+_queue = Queue("transcribe", connection=_redis)
 
 
 @router.post("/transcribe", status_code=202)
-async def transcribe(audio: UploadFile, request: Request):
-    """Transcribe an uploaded audio or video file.
+async def transcribe(audio: UploadFile):
+    """Accept an audio upload and enqueue the transcription work.
 
-    The file is buffered to a temporary path on disk, passed to the
-    `ASRModel` instance attached to the application state at startup, and
-    removed in a `finally` block so the temp file does not leak when the
-    response (or an error) is produced.
+    The file is buffered to a temporary path on disk; the actual ASR
+    work runs asynchronously in an RQ worker. The endpoint returns
+    immediately with HTTP 202 Accepted and a job id.
 
     Args:
         audio: Uploaded file. Only the extensions listed below are
             accepted; the check is by filename, not content sniffing.
-        request: FastAPI request, used to access `app.state.asr`.
 
     Returns:
-        A JSON object with `job_id`, detected `language`, source
-        `duration` in seconds, the concatenated `full_text`, and a
-        `segments` list with per-segment text, timing, and word-level
-        alignment.
+        A JSON object with `job_id` (UUID) and `status` (`queued`).
+        Use `/jobs/{job_id}` to poll for progress and
+        `/jobs/{job_id}/result` to fetch the transcription once done.
 
     Raises:
         HTTPException: 400 if the file extension is not supported.
@@ -50,7 +49,7 @@ async def transcribe(audio: UploadFile, request: Request):
     tmp_path = f'/tmp/{job_id}_{audio.filename}'
     with open(tmp_path, 'wb') as buffer:
         buffer.write(await audio.read())
-    
+
     db = SessionLocal()
     job = Job(
         id=job_id,
@@ -61,6 +60,5 @@ async def transcribe(audio: UploadFile, request: Request):
     db.commit()
     db.close()
 
-    _queue.enqueue(transcribe_job, job_id, file_path=tmp_path,
-                    job_timeout=600)
+    _queue.enqueue(transcribe_job, job_id, file_path=tmp_path, job_timeout=600)
     return {"job_id": job_id, "status": "queued"}

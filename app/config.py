@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     redis_url: str = Field(
         default="redis://localhost:6379/0",
-        description="Redis URL for the task queue."
+        description="Redis connection URL used by the RQ task queue.",
     )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
