@@ -9,11 +9,19 @@ import os
 import uuid
 
 from fastapi import APIRouter, UploadFile, Request, HTTPException
+from redis import Redis
+from rq import Queue
+from app.workers.transcribe_worker import transcribe_job
+from app.db.session import SessionLocal
+from app.db.models import Job
+from app.config import settings
 
 router = APIRouter()
+_redis = Redis.from_url(settings.redis_url)
+_queue = Queue('transcribe', connection=_redis)
 
 
-@router.post("/transcribe")
+@router.post("/transcribe", status_code=202)
 async def transcribe(audio: UploadFile, request: Request):
     """Transcribe an uploaded audio or video file.
 
@@ -39,19 +47,20 @@ async def transcribe(audio: UploadFile, request: Request):
     if not audio.filename.endswith(('.wav', '.mp3', '.m4a', '.flac', '.mp4')):
         raise HTTPException(400, 'unsupported audio format')
     job_id = str(uuid.uuid4())
-    tmp_path = f'/tmp/{job_id}_{audio.filename}'
+    tmp_path = f'{settings.temp_audio_dir}/{job_id}_{audio.filename}'
     with open(tmp_path, 'wb') as buffer:
         buffer.write(await audio.read())
-    try:
-        asr = request.app.state.asr
-        result = asr.transcribe(tmp_path)
-        return {
-            'job_id': job_id,
-            'language': result.language,
-            'duration': result.duration,
-            'full_text': result.full_text,
-            'segments': [s.model_dump() for s in result.segments],
-        }
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    
+    db = SessionLocal()
+    job = Job(
+        id=job_id,
+        audio_filename=audio.filename,
+        status="queued",
+    )
+    db.add(job)
+    db.commit()
+    db.close()
+
+    _queue.enqueue(transcribe_job, job_id=job_id, file_path=tmp_path,
+                    job_timeout=600)
+    return {"job_id": job_id, "status": "queued"}
