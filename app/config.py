@@ -41,6 +41,11 @@ class Settings(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis URL for the task queue."
+    )
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

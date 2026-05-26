@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.transcribe import router as transcribe_router
+from app.api.jobs import router as jobs_router
 from app.config import settings
 from app.core import ASRModel
 
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="ASR Pipeline", version="0.1.0")
 
+app.include_router(jobs_router)
 app.include_router(transcribe_router)
 
 

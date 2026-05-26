@@ -11,3 +11,4 @@ wheels/
 *.mp4
 *.wav
 .env
+scripts/
