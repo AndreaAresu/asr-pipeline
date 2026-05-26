@@ -8,7 +8,7 @@ successfully.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Float, DateTime, ForeignKey
+from sqlalchemy import String, Float, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -54,3 +54,16 @@ class Transcript(Base):
 
     def __repr__(self) -> str:
         return f"Transcript(id={self.id}, job_id={self.job_id}, language={self.language})"
+
+class ApiKey(Base):
+
+    __tablename__ = "api_keys"
+
+    key_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    daily_minute_quota: Mapped[int] = mapped_column(Integer, default=60)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self) -> str:
+        return f"ApiKey(key_hash={self.key_hash}, name={self.name})"
+
