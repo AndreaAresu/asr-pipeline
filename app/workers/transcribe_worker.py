@@ -1,13 +1,13 @@
 from app.db.session import SessionLocal
 from app.db.models import Transcript, Job
 from datetime import datetime, timezone
+from app.core.asr import ASRModel
 
 _asr = None
 def get_asr():
     global _asr
     if _asr is None:
-        from app.core.asr import ASR
-        _asr = ASR()
+        _asr = ASRModel()
     return _asr
 
 def transcribe_job(job_id: str, file_path: str):
