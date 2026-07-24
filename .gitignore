@@ -12,3 +12,6 @@ wheels/
 *.wav
 .env
 scripts/
+
+# Local agent instructions
+CLAUDE.md
