@@ -34,7 +34,7 @@ def get_asr() -> ASRModel:
     return _asr
 
 
-def transcribe_job(job_id: str, file_path: str) -> None:
+def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -> None:
     """Transcribe a single audio file and persist the result.
 
     Marks the job as `processing` on entry, runs the ASR model, then on
@@ -45,9 +45,13 @@ def transcribe_job(job_id: str, file_path: str) -> None:
     Args:
         job_id: Primary key of the `Job` row to update.
         file_path: Local path to the audio file to transcribe.
+        request_id: Correlation id propagated from the API request that
+            enqueued this job, so worker logs can be tied back to it.
     """
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(job_id=job_id)
+    if request_id:
+        structlog.contextvars.bind_contextvars(request_id=request_id)
 
     db = SessionLocal()
     try:

@@ -13,7 +13,7 @@ from app.db.models import ApiKey
 from app.db.session import SessionLocal
 
 
-def get_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> ApiKey:
+def get_api_key(x_api_key: str | None = Header(None, alias="X-API-Key")) -> ApiKey:
     """Resolve and validate the caller's API key.
 
     Args:
@@ -23,8 +23,12 @@ def get_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> ApiKey:
         The matching `ApiKey` row.
 
     Raises:
-        HTTPException: 401 if the header does not match any stored key.
+        HTTPException: 401 if the header is missing or does not match any
+            stored key.
     """
+    if not x_api_key:
+        raise HTTPException(401, "missing API key")
+
     key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
 
     db = SessionLocal()

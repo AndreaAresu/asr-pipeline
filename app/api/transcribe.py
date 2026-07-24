@@ -9,6 +9,7 @@ returns the job id so the client can poll `/jobs/{id}` for status and
 import os
 import uuid
 
+import structlog
 from fastapi import APIRouter, UploadFile, HTTPException, Depends
 from redis import Redis
 from rq import Queue
@@ -55,6 +56,12 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
             audio quota would be exceeded.
     """
     if not audio.filename.endswith(('.wav', '.mp3', '.m4a', '.flac', '.mp4')):
+        logger.info(
+            "transcribe.rejected",
+            reason="unsupported_format",
+            status_code=400,
+            filename=audio.filename,
+        )
         raise HTTPException(400, 'unsupported audio format')
     job_id = str(uuid.uuid4())
     tmp_path = f'/tmp/{job_id}_{audio.filename}'
@@ -80,12 +87,24 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
             db.commit()
         finally:
             db.close()
-    except Exception:
+    except Exception as e:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+        if isinstance(e, HTTPException):
+            logger.info(
+                "transcribe.rejected",
+                reason=e.detail,
+                status_code=e.status_code,
+                filename=audio.filename,
+                api_key_hash=api_key.key_hash,
+            )
         raise
 
-    _queue.enqueue(transcribe_job, job_id, file_path=tmp_path, job_timeout=600)
+    request_id = structlog.contextvars.get_contextvars().get("request_id")
+    _queue.enqueue(
+        transcribe_job, job_id,
+        file_path=tmp_path, request_id=request_id, job_timeout=600,
+    )
     logger.info(
         "transcribe.enqueued",
         job_id=job_id,
