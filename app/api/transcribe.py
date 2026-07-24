@@ -15,6 +15,7 @@ from rq import Queue
 from starlette.concurrency import run_in_threadpool
 
 from app.core.auth import get_api_key
+from app.core.logging import logger
 from app.core.rate_limit import probe_duration, enforce_quota
 from app.workers.transcribe_worker import transcribe_job
 from app.db.session import SessionLocal
@@ -85,4 +86,11 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
         raise
 
     _queue.enqueue(transcribe_job, job_id, file_path=tmp_path, job_timeout=600)
+    logger.info(
+        "transcribe.enqueued",
+        job_id=job_id,
+        api_key_hash=api_key.key_hash,
+        filename=audio.filename,
+        duration=duration,
+    )
     return {"job_id": job_id, "status": "queued"}

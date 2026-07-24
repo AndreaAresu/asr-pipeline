@@ -4,13 +4,18 @@ Picked up by an RQ worker subscribed to the `transcribe` queue. Drives
 the `Job` row through its lifecycle (`queued` → `processing` → `done`
 or `failed`) and, on success, stores the output in a `Transcript` row.
 """
-import os 
+import os
 from datetime import datetime, timezone
 
+import structlog
+
 from app.core.asr import ASRModel
+from app.core.logging import setup_logging, logger
 from app.db.models import Job, Transcript
 from app.db.session import SessionLocal
 
+
+setup_logging()
 
 _asr: ASRModel | None = None
 
@@ -41,12 +46,16 @@ def transcribe_job(job_id: str, file_path: str) -> None:
         job_id: Primary key of the `Job` row to update.
         file_path: Local path to the audio file to transcribe.
     """
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(job_id=job_id)
+
     db = SessionLocal()
     try:
         job = db.get(Job, job_id)
         job.status = "processing"
         job.started_at = datetime.now(timezone.utc)
         db.commit()
+        logger.info("transcribe.started")
 
         result = get_asr().transcribe(file_path)
 
@@ -61,11 +70,17 @@ def transcribe_job(job_id: str, file_path: str) -> None:
         job.duration = result.duration
         job.finished_at = datetime.now(timezone.utc)
         db.commit()
+        logger.info(
+            "transcribe.completed",
+            duration=result.duration,
+            language=result.language,
+        )
     except Exception as e:
         job.status = "failed"
         job.error_message = str(e)
         job.finished_at = datetime.now(timezone.utc)
         db.commit()
+        logger.error("transcribe.failed", error=str(e))
         raise
     finally:
         db.close()
