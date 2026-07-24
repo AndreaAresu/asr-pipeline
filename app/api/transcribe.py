@@ -8,13 +8,14 @@ returns the job id so the client can poll `/jobs/{id}` for status and
 
 import uuid
 
-from fastapi import APIRouter, UploadFile, HTTPException
+from fastapi import APIRouter, UploadFile, HTTPException, Depends
 from redis import Redis
 from rq import Queue
 
+from app.core.auth import get_api_key
 from app.workers.transcribe_worker import transcribe_job
 from app.db.session import SessionLocal
-from app.db.models import Job
+from app.db.models import ApiKey, Job
 from app.config import settings
 
 
@@ -24,7 +25,7 @@ _queue = Queue("transcribe", connection=_redis)
 
 
 @router.post("/transcribe", status_code=202)
-async def transcribe(audio: UploadFile):
+async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
     """Accept an audio upload and enqueue the transcription work.
 
     The file is buffered to a temporary path on disk; the actual ASR
@@ -34,6 +35,9 @@ async def transcribe(audio: UploadFile):
     Args:
         audio: Uploaded file. Only the extensions listed below are
             accepted; the check is by filename, not content sniffing.
+        api_key: Authenticated caller, resolved from the `X-API-Key`
+            header. Its `key_hash` is recorded on the job for rate
+            limiting.
 
     Returns:
         A JSON object with `job_id` (UUID) and `status` (`queued`).
@@ -41,7 +45,8 @@ async def transcribe(audio: UploadFile):
         `/jobs/{job_id}/result` to fetch the transcription once done.
 
     Raises:
-        HTTPException: 400 if the file extension is not supported.
+        HTTPException: 401 if the `X-API-Key` header is missing or
+            invalid; 400 if the file extension is not supported.
     """
     if not audio.filename.endswith(('.wav', '.mp3', '.m4a', '.flac', '.mp4')):
         raise HTTPException(400, 'unsupported audio format')
@@ -53,6 +58,7 @@ async def transcribe(audio: UploadFile):
     db = SessionLocal()
     job = Job(
         id=job_id,
+        api_key_hash=api_key.key_hash,
         audio_filename=audio.filename,
         status="queued",
     )
