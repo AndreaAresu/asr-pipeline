@@ -6,7 +6,7 @@ request or unit of work. Also exposes `init_db()` for one-shot table
 creation during local development.
 """
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
@@ -25,5 +25,10 @@ def init_db() -> None:
     suitable for the first run and for local development, but it is not a
     migration tool — it does not detect or apply column additions, type
     changes, index drops, or any schema diff.
+
+    Ensures the pgvector `vector` extension exists first, since the
+    `chunks.embedding` column depends on it.
     """
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(bind=engine)

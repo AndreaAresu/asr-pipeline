@@ -8,6 +8,7 @@ successfully.
 import uuid
 from datetime import datetime, timezone
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import String, Float, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -51,9 +52,46 @@ class Transcript(Base):
     word_timestamps: Mapped[dict] = mapped_column(JSONB)
 
     job: Mapped["Job"] = relationship(back_populates="transcript")
+    chunks: Mapped[list["Chunk"]] = relationship(back_populates="transcript", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"Transcript(id={self.id}, job_id={self.job_id}, language={self.language})"
+
+
+class Chunk(Base):
+    """A retrievable slice of a transcript with its embedding vector.
+
+    Transcripts are split into overlapping-or-contiguous chunks so they can
+    be semantically searched: each chunk carries its text, the time span it
+    covers in the source audio, and a 384-dim embedding (the output size of
+    the sentence-transformers `all-MiniLM-L6-v2` family) stored as a
+    pgvector column.
+    """
+
+    __tablename__ = "chunks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    transcript_id: Mapped[str] = mapped_column(String, ForeignKey("transcripts.id"))
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    start_sec: Mapped[float] = mapped_column(Float)
+    end_sec: Mapped[float] = mapped_column(Float)
+    text: Mapped[str] = mapped_column(String)
+    embedding: Mapped[list[float]] = mapped_column(Vector(384))
+
+    transcript: Mapped["Transcript"] = relationship(back_populates="chunks")
+
+    # TODO: once enough chunks exist to train the clustering (well past a
+    # few thousand rows), add an IVFFlat index for approximate search:
+    #   Index("ix_chunks_embedding", Chunk.embedding,
+    #         postgresql_using="ivfflat",
+    #         postgresql_with={"lists": 100},
+    #         postgresql_ops={"embedding": "vector_cosine_ops"})
+    # Until then the table uses a sequential scan, which is exact and fast
+    # enough up to ~10k chunks. IVFFlat needs data present at CREATE time to
+    # train its clusters, so it must be built after backfilling, not here.
+
+    def __repr__(self) -> str:
+        return f"Chunk(id={self.id}, transcript_id={self.transcript_id}, chunk_index={self.chunk_index})"
 
 class ApiKey(Base):
 

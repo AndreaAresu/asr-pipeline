@@ -5,7 +5,7 @@ the `Job` row through its lifecycle (`queued` → `processing` → `done`
 or `failed`) and, on success, stores the output in a `Transcript` row.
 """
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import structlog
 
@@ -17,7 +17,35 @@ from app.db.session import SessionLocal
 
 setup_logging()
 
+# A work-horse that dies without running its `finally` (OOM, SIGKILL, the
+# macOS fork crash) leaves its job in `processing` forever. RQ's job_timeout
+# is 600s, so any job still `processing` well past that can never complete.
+STALE_PROCESSING_TIMEOUT = timedelta(seconds=900)
+
 _asr: ASRModel | None = None
+
+
+def reap_stale_jobs() -> int:
+    """Fail jobs stuck in `processing` past `STALE_PROCESSING_TIMEOUT`.
+
+    Called at worker startup to clean up rows orphaned by a previous
+    worker that was killed mid-job. Returns the number of jobs reaped.
+    """
+    cutoff = datetime.now(timezone.utc) - STALE_PROCESSING_TIMEOUT
+    db = SessionLocal()
+    try:
+        stale = db.query(Job).filter(
+            Job.status == "processing",
+            Job.started_at < cutoff,
+        ).all()
+        for job in stale:
+            job.status = "failed"
+            job.error_message = "worker terminated before completion"
+            job.finished_at = datetime.now(timezone.utc)
+        db.commit()
+        return len(stale)
+    finally:
+        db.close()
 
 
 def get_asr() -> ASRModel:
