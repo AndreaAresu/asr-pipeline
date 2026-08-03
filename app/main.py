@@ -8,14 +8,15 @@ probe.
 import uuid
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from app.api.transcribe import router as transcribe_router
 from app.api.jobs import router as jobs_router
 from app.api.search import router as search_router
 from app.api.summarize import router as summarize_router
-from app.config import settings
-from app.core.logging import setup_logging, logger
+from app.api.transcribe import router as transcribe_router
+from app.core.logging import logger, setup_logging
+from app.core.metrics import http_errors_total, http_requests_total, registry
 
 setup_logging()
 
@@ -44,6 +45,14 @@ async def request_context(request: Request, call_next):
     response = await call_next(request)
     logger.info("request.end", status_code=response.status_code)
 
+    # Label on the route template ("/jobs/{job_id}"), not the raw path:
+    # one series per route, rather than one per job id.
+    route = request.scope.get("route")
+    path = getattr(route, "path", "unmatched")
+    http_requests_total.labels(request.method, path, response.status_code).inc()
+    if response.status_code >= 400:
+        http_errors_total.labels(f"{response.status_code // 100}xx").inc()
+
     response.headers["X-Request-Id"] = request_id
     return response
 
@@ -58,3 +67,14 @@ app.include_router(summarize_router)
 async def health():
     """Liveness probe returning a static OK payload."""
     return {"status": "ok"}
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    """Expose Prometheus metrics in the text exposition format.
+
+    Deliberately unauthenticated so a scraper needs no credentials; it
+    exposes only aggregate counts, never transcript content or key
+    material. Keep it off the public internet in a real deployment.
+    """
+    return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
