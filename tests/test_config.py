@@ -9,6 +9,32 @@ import pytest
 
 from app.config import Settings
 
+# Every name pydantic-settings would read for the database configuration.
+# Whatever the test passes explicitly has to be the only input.
+DB_ENV_VARS = (
+    "DATABASE_URL",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_DB",
+    "POSTGRES_HOST",
+    "POSTGRES_PORT",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_db_config(monkeypatch):
+    """Hide any database configuration the environment happens to carry.
+
+    `_env_file=None` stops the developer's `.env` from being read but not
+    real environment variables, which outrank the keyword arguments these
+    tests construct Settings with. CI exports `DATABASE_URL` so importing
+    `app.config` succeeds, and that alone was enough to make the assembly
+    test read back the CI URL and the incomplete-config test see a valid
+    configuration.
+    """
+    for name in DB_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
 
 def build(**kwargs) -> Settings:
     """Construct Settings without reading the developer's local .env."""
