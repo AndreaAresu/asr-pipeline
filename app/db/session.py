@@ -21,10 +21,15 @@ SessionLocal = sessionmaker(engine, autocommit=False, autoflush=False)
 def init_db() -> None:
     """Create all tables declared on the ORM `Base` metadata.
 
-    Idempotent: tables that already exist are left untouched. This is
-    suitable for the first run and for local development, but it is not a
-    migration tool — it does not detect or apply column additions, type
-    changes, index drops, or any schema diff.
+    **Alembic owns the schema** — run `alembic upgrade head` instead
+    (compose and the Fly release command both do). This helper remains
+    only for throwaway databases in tests and scratch work, where paying
+    for a migration run buys nothing.
+
+    Idempotent, but not a migration tool: it does not detect or apply
+    column additions, type changes, or any schema diff, and it does not
+    stamp an Alembic revision — a database created this way looks
+    un-migrated to Alembic.
 
     Ensures the pgvector `vector` extension exists first, since the
     `chunks.embedding` column depends on it.
