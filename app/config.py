@@ -52,6 +52,17 @@ class Settings(BaseSettings):
         default="redis://localhost:6379/0",
         description="Redis connection URL used by the RQ task queue.",
     )
+    groq_api_key: str = Field(
+        default="",
+        description=(
+            "Groq API key used for summarization. Optional: transcription and search "
+            "work without it, and /summarize returns 503 while it is unset."
+        ),
+    )
+    summarize_model: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Groq chat model used to summarize transcripts.",
+    )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

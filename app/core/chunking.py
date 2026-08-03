@@ -22,7 +22,7 @@ from typing import Any
 MIN_CHUNK_CHARS = 50
 
 
-def _field(seg: Any, name: str) -> Any:
+def segment_field(seg: Any, name: str) -> Any:
     """Read `name` from a segment given as a mapping or an object."""
     if isinstance(seg, Mapping):
         return seg[name]
@@ -31,7 +31,7 @@ def _field(seg: Any, name: str) -> Any:
 
 def _join_text(segs: list[Any]) -> str:
     """Concatenate segment texts, trimming Whisper's leading whitespace."""
-    return " ".join(_field(s, "text").strip() for s in segs).strip()
+    return " ".join(segment_field(s, "text").strip() for s in segs).strip()
 
 
 def chunk_segments(
@@ -74,9 +74,9 @@ def chunk_segments(
 
     for s in segments:
         if not buffer:
-            buffer_start = _field(s, "start")
+            buffer_start = segment_field(s, "start")
         buffer.append(s)
-        s_end = _field(s, "end")
+        s_end = segment_field(s, "end")
 
         if s_end - buffer_start >= target_duration:
             chunk = emit(buffer_start, s_end)
@@ -87,14 +87,14 @@ def chunk_segments(
             # Re-seed the buffer with the tail overlapping the last
             # `overlap` seconds, so the next chunk overlaps this one.
             cutoff = s_end - overlap
-            buffer = [seg for seg in buffer if _field(seg, "end") > cutoff]
-            buffer_start = _field(buffer[0], "start") if buffer else None
+            buffer = [seg for seg in buffer if segment_field(seg, "end") > cutoff]
+            buffer_start = segment_field(buffer[0], "start") if buffer else None
 
     # Trailing buffer that never reached target_duration. Skip it if it is
     # only the carried-over overlap tail (adds nothing past the last chunk),
     # which would otherwise duplicate the previous chunk's ending.
     if buffer:
-        trailing_end = _field(buffer[-1], "end")
+        trailing_end = segment_field(buffer[-1], "end")
         if last_end is None or trailing_end > last_end:
             chunk = emit(buffer_start, trailing_end)
             if chunk is not None:
