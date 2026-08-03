@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASR Pipeline</title>
+<style>
+  /* Single self-contained file: no CDN, no build step. The whole point of
+     serving the UI from the API is that `docker compose up` is the only
+     setup, so pulling in a framework would defeat it. */
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbfd;
+    --panel: #ffffff;
+    --border: #e3e3e8;
+    --text: #16161a;
+    --muted: #6b6b76;
+    --accent: #3b5bdb;
+    --accent-soft: #edf0fd;
+    --ok: #2f9e44;
+    --warn: #e8a13a;
+    --err: #d64545;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131317;
+      --panel: #1b1b21;
+      --border: #2e2e37;
+      --text: #ecedf1;
+      --muted: #9a9aa6;
+      --accent: #7f9cf5;
+      --accent-soft: #23283d;
+      --ok: #51cf66;
+      --warn: #f2b544;
+      --err: #ff6b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+  h1 { font-size: 21px; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .tagline { color: var(--muted); font-size: 13.5px; margin: 0 0 26px; }
+  .key-box { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .key-box input { width: 210px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); }
+  .dot.off { background: var(--err); }
+
+  section {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 18px;
+  }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em;
+       color: var(--muted); margin: 0 0 14px; font-weight: 600; }
+
+  input, button, select {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--border); border-radius: 7px; padding: 8px 11px;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    background: var(--accent); color: #fff; border-color: transparent;
+    cursor: pointer; font-weight: 500; padding: 8px 16px;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.08); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--accent); border-color: var(--border); }
+
+  /* upload */
+  #drop {
+    border: 1.5px dashed var(--border); border-radius: var(--radius);
+    padding: 34px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #drop:hover, #drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  #drop strong { display: block; margin-bottom: 4px; }
+  #drop small { color: var(--muted); }
+  #file { display: none; }
+
+  /* jobs */
+  .job { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px;
+         padding: 11px 0; border-top: 1px solid var(--border); }
+  .job:first-child { border-top: none; }
+  .job-name { font-weight: 500; word-break: break-all; }
+  .job-meta { color: var(--muted); font-size: 12.5px; grid-column: 1 / -1; }
+  .badge { font-size: 12px; padding: 2px 9px; border-radius: 20px;
+           border: 1px solid var(--border); white-space: nowrap; height: fit-content; }
+  .badge.queued { color: var(--muted); }
+  .badge.processing { color: var(--warn); border-color: var(--warn); }
+  .badge.done { color: var(--ok); border-color: var(--ok); }
+  .badge.failed { color: var(--err); border-color: var(--err); }
+  .bar { grid-column: 1 / -1; height: 3px; background: var(--border);
+         border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 40%; background: var(--warn);
+           animation: slide 1.4s ease-in-out infinite; }
+  @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+
+  /* search */
+  .row { display: flex; gap: 9px; flex-wrap: wrap; }
+  .row input[type=text] { flex: 1; min-width: 220px; }
+  .hit { border-top: 1px solid var(--border); padding: 13px 0;
+         display: grid; grid-template-columns: 74px 1fr; gap: 14px; }
+  .score { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 17px; }
+  .time { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+  /* summary */
+  details { border-top: 1px solid var(--border); padding: 11px 0; }
+  details summary { cursor: pointer; font-weight: 500; display: flex;
+                    justify-content: space-between; gap: 12px; }
+  details ul { margin: 9px 0 2px; padding-left: 20px; color: var(--muted); }
+  details li { margin: 4px 0; }
+
+  .empty { color: var(--muted); font-size: 13.5px; }
+  .note { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+  .msg { padding: 10px 13px; border-radius: 7px; font-size: 13.5px; margin-top: 12px; }
+  .msg.err { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+  .msg.ok  { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>ASR Pipeline <span>· console</span></h1>
+    <div class="key-box">
+      <span class="dot" id="keyDot" title="API key status"></span>
+      <input type="password" id="apiKey" placeholder="X-API-Key" autocomplete="off">
+    </div>
+  </header>
+  <p class="tagline">
+    Upload audio, watch it transcribe, then search across everything indexed
+    or summarize a single recording.
+  </p>
+
+  <section>
+    <h2>Transcribe</h2>
+    <div id="drop">
+      <strong>Drop an audio file here</strong>
+      <small>or click to choose · wav, mp3, m4a, flac, mp4</small>
+    </div>
+    <input type="file" id="file" accept=".wav,.mp3,.m4a,.flac,.mp4">
+    <div id="uploadMsg"></div>
+    <p class="note">
+      Transcription runs at roughly half of real time on CPU, so an hour of
+      audio takes about half an hour. The page keeps polling — you can leave
+      and come back.
+    </p>
+  </section>
+
+  <section>
+    <h2>Jobs</h2>
+    <div id="jobs"><p class="empty">No jobs yet.</p></div>
+  </section>
+
+  <section>
+    <h2>Search</h2>
+    <div class="row">
+      <input type="text" id="q" placeholder="e.g. what is being discussed about intelligence agencies">
+      <button id="searchBtn">Search</button>
+    </div>
+    <div id="hits"></div>
+  </section>
+
+  <section>
+    <h2>Summarize</h2>
+    <div class="row">
+      <select id="transcriptSel"><option value="">No completed transcripts yet</option></select>
+      <button id="sumBtn">Summarize</button>
+    </div>
+    <div id="summary"></div>
+  </section>
+
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const KEY_STORAGE = "asr.apiKey";
+
+  // Same origin as the API that served this page, so no host to configure.
+  const api = (path, opts = {}) => {
+    const key = $("apiKey").value.trim();
+    return fetch(path, {
+      ...opts,
+      headers: { ...(opts.headers || {}), ...(key ? { "X-API-Key": key } : {}) },
+    });
+  };
+
+  const fmtTime = (s) => {
+    s = Math.floor(s || 0);
+    const m = Math.floor(s / 60);
+    return `${m}:${String(s % 60).padStart(2, "0")}`;
+  };
+
+  const msg = (el, text, kind = "err") => {
+    el.innerHTML = text ? `<div class="msg ${kind}">${escapeHtml(text)}</div>` : "";
+  };
+
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+  // Turn a failed response into something a person can act on. Reading the
+  // body matters: the API explains *why* a 400 or 429 happened.
+  const errorText = async (res) => {
+    if (res.status === 401) return "Invalid or missing API key.";
+    try {
+      const body = await res.json();
+      return body.detail || `Request failed (${res.status}).`;
+    } catch {
+      return `Request failed (${res.status}).`;
+    }
+  };
+
+  // --- API key -----------------------------------------------------------
+  const keyInput = $("apiKey");
+  keyInput.value = localStorage.getItem(KEY_STORAGE) || "";
+
+  const refreshKeyDot = (state) => {
+    $("keyDot").className = "dot" + (state ? ` ${state}` : "");
+  };
+
+  keyInput.addEventListener("input", () => {
+    localStorage.setItem(KEY_STORAGE, keyInput.value.trim());
+    refreshKeyDot("");
+    loadJobs();
+  });
+
+  // --- upload ------------------------------------------------------------
+  const drop = $("drop");
+  const fileInput = $("file");
+
+  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    if (e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) upload(fileInput.files[0]);
+    fileInput.value = "";
+  });
+
+  async function upload(file) {
+    if (!keyInput.value.trim()) {
+      msg($("uploadMsg"), "Enter an API key first.");
+      return;
+    }
+    const body = new FormData();
+    body.append("audio", file);
+    msg($("uploadMsg"), `Uploading ${file.name}…`, "ok");
+
+    try {
+      const res = await api("/transcribe", { method: "POST", body });
+      if (!res.ok) {
+        msg($("uploadMsg"), await errorText(res));
+        refreshKeyDot(res.status === 401 ? "off" : "");
+        return;
+      }
+      msg($("uploadMsg"), `${file.name} queued.`, "ok");
+      refreshKeyDot("on");
+      loadJobs();
+    } catch {
+      msg($("uploadMsg"), "Could not reach the API.");
+    }
+  }
+
+  // --- jobs --------------------------------------------------------------
+  let transcripts = [];
+
+  async function loadJobs() {
+    if (!keyInput.value.trim()) {
+      $("jobs").innerHTML = '<p class="empty">Enter an API key to see your jobs.</p>';
+      return;
+    }
+    let jobs;
+    try {
+      const res = await api("/jobs?limit=25");
+      if (!res.ok) {
+        $("jobs").innerHTML = `<p class="empty">${escapeHtml(await errorText(res))}</p>`;
+        refreshKeyDot(res.status === 401 ? "off" : "");
+        return;
+      }
+      jobs = await res.json();
+      refreshKeyDot("on");
+    } catch {
+      $("jobs").innerHTML = '<p class="empty">Could not reach the API.</p>';
+      return;
+    }
+
+    $("jobs").innerHTML = jobs.length
+      ? jobs.map(renderJob).join("")
+      : '<p class="empty">No jobs yet.</p>';
+
+    transcripts = jobs.filter((j) => j.transcript_id);
+    renderTranscriptOptions();
+  }
+
+  function renderJob(j) {
+    const meta = [
+      j.duration ? `${fmtTime(j.duration)} of audio` : null,
+      j.created_at ? new Date(j.created_at).toLocaleString() : null,
+      j.error_message,
+    ].filter(Boolean).join(" · ");
+
+    const bar = j.status === "processing" ? '<div class="bar"><i></i></div>' : "";
+    return `<div class="job">
+      <div class="job-name">${escapeHtml(j.audio_filename)}</div>
+      <div class="badge ${j.status}">${j.status}</div>
+      ${bar}
+      <div class="job-meta">${escapeHtml(meta)}</div>
+    </div>`;
+  }
+
+  function renderTranscriptOptions() {
+    const sel = $("transcriptSel");
+    const previous = sel.value;
+    if (!transcripts.length) {
+      sel.innerHTML = '<option value="">No completed transcripts yet</option>';
+      return;
+    }
+    sel.innerHTML = transcripts
+      .map((j) => `<option value="${j.transcript_id}">${escapeHtml(j.audio_filename)}</option>`)
+      .join("");
+    if (transcripts.some((j) => j.transcript_id === previous)) sel.value = previous;
+  }
+
+  // Poll while anything is unfinished, then fall back to a slow refresh so
+  // a job started in another tab still shows up without hammering the API.
+  setInterval(loadJobs, 4000);
+
+  // --- search ------------------------------------------------------------
+  $("searchBtn").addEventListener("click", search);
+  $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
+
+  async function search() {
+    const query = $("q").value.trim();
+    if (!query) return;
+    const out = $("hits");
+    out.innerHTML = '<p class="empty">Searching…</p>';
+
+    try {
+      const res = await api("/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, top_k: 5 }),
+      });
+      if (!res.ok) { msg(out, await errorText(res)); return; }
+
+      const { hits } = await res.json();
+      out.innerHTML = hits.length
+        ? hits.map((h) => `<div class="hit">
+             <div>
+               <div class="score">${h.score.toFixed(3)}</div>
+               <div class="time">${fmtTime(h.start_sec)}–${fmtTime(h.end_sec)}</div>
+             </div>
+             <div>${escapeHtml(h.text)}</div>
+           </div>`).join("")
+        : '<p class="empty">No hits — nothing indexed yet.</p>';
+    } catch {
+      msg(out, "Could not reach the API.");
+    }
+  }
+
+  // --- summarize ---------------------------------------------------------
+  $("sumBtn").addEventListener("click", summarize);
+
+  async function summarize() {
+    const id = $("transcriptSel").value;
+    const out = $("summary");
+    if (!id) { msg(out, "No transcript selected."); return; }
+    out.innerHTML = '<p class="empty">Summarizing… first time takes a few seconds.</p>';
+
+    try {
+      const res = await api(`/summarize/${id}`, { method: "POST" });
+      if (!res.ok) { msg(out, await errorText(res)); return; }
+
+      const data = await res.json();
+      const meta = `${data.model} · ${data.cached ? "cached" : "generated"}` +
+        ` · ${data.meta.input_tokens} in / ${data.meta.output_tokens} out tokens` +
+        (data.meta.transcript_thinned ? " · transcript thinned to fit the model" : "");
+
+      out.innerHTML = data.sections.map((s) => `
+        <details open>
+          <summary><span>${escapeHtml(s.title)}</span>
+            <span class="time">${fmtTime(s.start_sec)}–${fmtTime(s.end_sec)}</span></summary>
+          <ul>${s.key_points.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>
+        </details>`).join("") + `<p class="note">${escapeHtml(meta)}</p>`;
+    } catch {
+      msg(out, "Could not reach the API.");
+    }
+  }
+
+  loadJobs();
+})();
+</script>
+</body>
+</html>

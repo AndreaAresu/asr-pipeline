@@ -6,9 +6,11 @@ probe.
 """
 
 import uuid
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.jobs import router as jobs_router
@@ -61,6 +63,21 @@ app.include_router(jobs_router)
 app.include_router(transcribe_router)
 app.include_router(search_router)
 app.include_router(summarize_router)
+
+
+UI_FILE = Path(__file__).parent / "web" / "index.html"
+
+
+@app.get("/", include_in_schema=False)
+async def ui():
+    """Serve the browser console.
+
+    The UI is one self-contained HTML file served by the API itself, so
+    running the service is the only setup a user needs — no second
+    process, no build step, and no host to configure, since the page
+    calls the same origin that served it.
+    """
+    return FileResponse(UI_FILE)
 
 
 @app.get("/health")

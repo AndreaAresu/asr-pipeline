@@ -70,17 +70,17 @@ pass "job $JOB accepted"
 
 step "polling until the job finishes"
 for i in $(seq 1 $JOB_RETRIES); do
-  STATUS=$(curl -fsS "$API_URL/jobs/$JOB" | jq -r .status)
+  STATUS=$(curl -fsS "$API_URL/jobs/$JOB" -H "X-API-Key: $KEY" | jq -r .status)
   case "$STATUS" in
     done)   pass "job completed after ~$((i * 2))s"; break ;;
-    failed) curl -s "$API_URL/jobs/$JOB" | jq .; docker compose logs --tail 50 worker; fail "job failed" ;;
+    failed) curl -s "$API_URL/jobs/$JOB" -H "X-API-Key: $KEY" | jq .; docker compose logs --tail 50 worker; fail "job failed" ;;
   esac
   [[ $i -eq $JOB_RETRIES ]] && { docker compose logs --tail 50 worker; fail "job still $STATUS after $((JOB_RETRIES * 2))s"; }
   sleep 2
 done
 
 step "fetching the transcript"
-RESULT=$(curl -fsS "$API_URL/jobs/$JOB/result")
+RESULT=$(curl -fsS "$API_URL/jobs/$JOB/result" -H "X-API-Key: $KEY")
 TRANSCRIPT_ID=$(echo "$RESULT" | jq -r .transcript_id)
 WORDS=$(echo "$RESULT" | jq -r '.full_text | split(" ") | length')
 [[ "$TRANSCRIPT_ID" != "null" ]] || fail "no transcript_id in the result"
