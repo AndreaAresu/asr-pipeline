@@ -54,6 +54,10 @@ def test_a_request_id_is_minted_when_absent(client):
         ("post", "/summarize/some-id", {}),
         # Listing jobs is scoped to the caller's key, so it must require one.
         ("get", "/jobs", {}),
+        # These return job status and full transcript text. Unauthenticated,
+        # anyone holding or guessing a job id could read someone's audio.
+        ("get", "/jobs/some-id", {}),
+        ("get", "/jobs/some-id/result", {}),
     ],
 )
 def test_protected_endpoints_reject_missing_keys(client, method, path, kwargs):

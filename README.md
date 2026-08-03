@@ -30,8 +30,8 @@ curl -X POST http://localhost:8080/transcribe \
   -H "X-API-Key: $KEY" -F "audio=@data/samples/sample.wav"
 # {"job_id":"…","status":"queued"}
 
-curl http://localhost:8080/jobs/$JOB_ID          # poll until "done"
-curl http://localhost:8080/jobs/$JOB_ID/result   # transcript + segments
+curl http://localhost:8080/jobs/$JOB_ID -H "X-API-Key: $KEY"          # poll until "done"
+curl http://localhost:8080/jobs/$JOB_ID/result -H "X-API-Key: $KEY"   # transcript + segments
 ```
 
 To verify a checkout end to end — build, transcribe, search, summarize,
@@ -91,12 +91,15 @@ cached, since the input never changes.
 
 ## API
 
-All endpoints except `/health` and `/metrics` require an `X-API-Key`
-header.
+All endpoints except `/`, `/health` and `/metrics` require an `X-API-Key`
+header. Jobs are scoped to the key that submitted them: reading someone
+else's job returns 404, the same as one that does not exist, so the API
+never confirms which ids are real.
 
 | Endpoint | Request | Response |
 |---|---|---|
 | `POST /transcribe` | multipart `audio` file | `202` · `{job_id, status}` |
+| `GET /jobs` | — | recent jobs for this key, newest first |
 | `GET /jobs/{id}` | — | `{id, status, error_message, duration}` |
 | `GET /jobs/{id}/result` | — | `{transcript_id, full_text, language, segments}` |
 | `POST /search` | `{query, top_k, transcript_id?}` | `{query, hits: [{transcript_id, start_sec, end_sec, text, score}]}` |

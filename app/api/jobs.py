@@ -75,12 +75,32 @@ def list_jobs(
         db.close()
 
 
+def _owned_job(db, job_id: str, api_key: ApiKey) -> Job:
+    """Fetch a job, but only for the key that submitted it.
+
+    A job that exists under another key is reported as **404, not 403**:
+    telling an unauthorized caller "this exists but is not yours" turns
+    the endpoint into an oracle for probing which ids are real. From
+    outside, someone else's job and a nonexistent one are indistinguishable.
+
+    Raises:
+        HTTPException: 404 if the job does not exist or belongs to
+            another key.
+    """
+    job = db.get(Job, job_id)
+    if job is None or job.api_key_hash != api_key.key_hash:
+        raise HTTPException(404, "job not found")
+    return job
+
+
 @router.get("/jobs/{job_id}")
-def get_job(job_id: str):
+def get_job(job_id: str, api_key: ApiKey = Depends(get_api_key)):
     """Return the current status of a transcription job.
 
     Args:
         job_id: UUID assigned when the job was enqueued by `/transcribe`.
+        api_key: Authenticated caller, resolved from the `X-API-Key`
+            header. Must be the key that submitted the job.
 
     Returns:
         A JSON object with `id`, `status` (`queued` | `processing` |
@@ -89,28 +109,30 @@ def get_job(job_id: str):
         `status == 'done'`).
 
     Raises:
-        HTTPException: 404 if no job with the given id exists.
+        HTTPException: 401 if the `X-API-Key` header is missing or
+            invalid; 404 if no such job exists for this key.
     """
     db = SessionLocal()
-    job = db.get(Job, job_id)
-    db.close()
-
-    if job is None:
-        raise HTTPException(404, "job not found")
-    return {
-        "id": job.id,
-        "status": job.status,
-        "error_message": job.error_message,
-        "duration": job.duration,
-    }
+    try:
+        job = _owned_job(db, job_id, api_key)
+        return {
+            "id": job.id,
+            "status": job.status,
+            "error_message": job.error_message,
+            "duration": job.duration,
+        }
+    finally:
+        db.close()
 
 
 @router.get("/jobs/{job_id}/result")
-def get_result(job_id: str):
+def get_result(job_id: str, api_key: ApiKey = Depends(get_api_key)):
     """Return the transcription output for a completed job.
 
     Args:
         job_id: UUID of a job whose `status == 'done'`.
+        api_key: Authenticated caller, resolved from the `X-API-Key`
+            header. Must be the key that submitted the job.
 
     Returns:
         A JSON object with `transcript_id` (the handle `/search` results
@@ -120,22 +142,21 @@ def get_result(job_id: str):
         `Transcript.word_timestamps`).
 
     Raises:
-        HTTPException: 404 if the job does not exist; 400 if the job
-            exists but has not finished successfully yet.
+        HTTPException: 401 if the `X-API-Key` header is missing or
+            invalid; 404 if no such job exists for this key; 400 if the
+            job exists but has not finished successfully yet.
     """
     db = SessionLocal()
-    job = db.get(Job, job_id)
-    if job is None:
+    try:
+        job = _owned_job(db, job_id, api_key)
+        if job.status != "done":
+            raise HTTPException(400, f"job not completed: status={job.status}")
+        t = db.query(Transcript).filter_by(job_id=job_id).first()
+        return {
+            "transcript_id": t.id,
+            "full_text": t.full_text,
+            "language": t.language,
+            "segments": t.word_timestamps,
+        }
+    finally:
         db.close()
-        raise HTTPException(404, "job not found")
-    if job.status != "done":
-        db.close()
-        raise HTTPException(400, f"job not completed: status={job.status}")
-    t = db.query(Transcript).filter_by(job_id=job_id).first()
-    db.close()
-    return {
-        "transcript_id": t.id,
-        "full_text": t.full_text,
-        "language": t.language,
-        "segments": t.word_timestamps,
-    }

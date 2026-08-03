@@ -66,13 +66,13 @@ for audio in "${AUDIO_FILES[@]}"; do
     start=$(now)
     job=$(curl -fsS -X POST "$API_URL/transcribe" -H "X-API-Key: $ASR_API_KEY" -F "audio=@$audio" | jq -r .job_id)
     while true; do
-      status=$(curl -fsS "$API_URL/jobs/$job" | jq -r .status)
+      status=$(curl -fsS "$API_URL/jobs/$job" -H "X-API-Key: $ASR_API_KEY" | jq -r .status)
       [[ "$status" == "done" ]] && break
       [[ "$status" == "failed" ]] && { echo "job failed for $audio" >&2; exit 1; }
       sleep 1
     done
     samples+="$(python3 -c "print($(now) - $start)")"$'\n'
-    LAST_TRANSCRIPT=$(curl -fsS "$API_URL/jobs/$job/result" | jq -r .transcript_id)
+    LAST_TRANSCRIPT=$(curl -fsS "$API_URL/jobs/$job/result" -H "X-API-Key: $ASR_API_KEY" | jq -r .transcript_id)
   done
 
   read -r p50 p95 n <<<"$(printf '%s' "$samples" | percentiles)"
