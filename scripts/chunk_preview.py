@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.core.chunking import chunk_segments, MIN_CHUNK_CHARS
+from app.core.chunking import MIN_CHUNK_CHARS, chunk_segments
 from app.db.models import Transcript
 from app.db.session import SessionLocal
 
@@ -65,7 +65,7 @@ def main() -> None:
         for c in chunks:
             if len(c["text"]) < MIN_CHUNK_CHARS:
                 print(f"!! chunk {c['chunk_index']} shorter than {MIN_CHUNK_CHARS} chars (should be filtered)")
-        for a, b in zip(chunks, chunks[1:]):
+        for a, b in zip(chunks, chunks[1:], strict=False):
             gap = b["start_sec"] - a["end_sec"]
             if gap > 0:
                 print(f"!! gap {gap:.1f}s between chunk {a['chunk_index']} and {b['chunk_index']} (no overlap)")

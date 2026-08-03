@@ -6,10 +6,10 @@ successfully.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import String, Float, DateTime, ForeignKey, Integer
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -30,7 +30,7 @@ class Job(Base):
     # valid values: queued | processing | done | failed
     status: Mapped[str] = mapped_column(String)
     error_message: Mapped[str | None] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -117,7 +117,7 @@ class Summary(Base):
     transcript_id: Mapped[str] = mapped_column(String, ForeignKey("transcripts.id"), primary_key=True)
     summary_json: Mapped[dict] = mapped_column(JSONB)
     model_used: Mapped[str] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     transcript: Mapped["Transcript"] = relationship(back_populates="summary")
 
@@ -138,7 +138,7 @@ class ApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     daily_minute_quota: Mapped[int] = mapped_column(Integer, default=60)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     def __repr__(self) -> str:
         return f"ApiKey(key_hash={self.key_hash}, name={self.name})"

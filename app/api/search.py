@@ -16,7 +16,6 @@ from app.core.logging import logger
 from app.db.models import ApiKey, Chunk
 from app.db.session import SessionLocal
 
-
 router = APIRouter()
 
 

@@ -22,7 +22,7 @@ from redis import Redis
 from rq import Queue, SimpleWorker, Worker
 
 from app.config import settings
-from app.core.logging import setup_logging, logger
+from app.core.logging import logger, setup_logging
 from app.workers.transcribe_worker import reap_stale_jobs
 
 

@@ -16,7 +16,6 @@ from app.core.summarize import SummarizationUnavailable, summarize_transcript
 from app.db.models import ApiKey, Job, Summary, Transcript
 from app.db.session import SessionLocal
 
-
 router = APIRouter()
 
 

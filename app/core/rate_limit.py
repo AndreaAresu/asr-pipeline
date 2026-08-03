@@ -12,14 +12,13 @@ window and raises HTTP 429 if the new upload would push the key over.
 """
 
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models import ApiKey, Job
-
 
 RATE_LIMIT_WINDOW = timedelta(hours=24)
 
@@ -59,7 +58,7 @@ def used_seconds(db: Session, key_hash: str) -> float:
     failed jobs are excluded so callers are not charged for service
     errors. Jobs with no recorded duration contribute zero.
     """
-    window_start = datetime.now(timezone.utc) - RATE_LIMIT_WINDOW
+    window_start = datetime.now(UTC) - RATE_LIMIT_WINDOW
     return db.query(func.coalesce(func.sum(Job.duration), 0.0)).filter(
         Job.api_key_hash == key_hash,
         Job.created_at >= window_start,

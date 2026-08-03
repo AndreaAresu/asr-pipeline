@@ -5,17 +5,16 @@ the `Job` row through its lifecycle (`queued` → `processing` → `done`
 or `failed`) and, on success, stores the output in a `Transcript` row.
 """
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
 from app.core.asr import ASRModel, TranscriptSegment
 from app.core.chunking import chunk_segments
 from app.core.embeddings import embed_batch
-from app.core.logging import setup_logging, logger
+from app.core.logging import logger, setup_logging
 from app.db.models import Chunk, Job, Transcript
 from app.db.session import SessionLocal
-
 
 setup_logging()
 
@@ -33,7 +32,7 @@ def reap_stale_jobs() -> int:
     Called at worker startup to clean up rows orphaned by a previous
     worker that was killed mid-job. Returns the number of jobs reaped.
     """
-    cutoff = datetime.now(timezone.utc) - STALE_PROCESSING_TIMEOUT
+    cutoff = datetime.now(UTC) - STALE_PROCESSING_TIMEOUT
     db = SessionLocal()
     try:
         stale = db.query(Job).filter(
@@ -43,7 +42,7 @@ def reap_stale_jobs() -> int:
         for job in stale:
             job.status = "failed"
             job.error_message = "worker terminated before completion"
-            job.finished_at = datetime.now(timezone.utc)
+            job.finished_at = datetime.now(UTC)
         db.commit()
         return len(stale)
     finally:
@@ -73,7 +72,7 @@ def index_chunks(db, transcript_id: str, segments: list[TranscriptSegment]) -> i
         return 0
 
     embeddings = embed_batch([c["text"] for c in chunks])
-    for chunk, embedding in zip(chunks, embeddings):
+    for chunk, embedding in zip(chunks, embeddings, strict=True):
         db.add(
             Chunk(
                 transcript_id=transcript_id,
@@ -124,7 +123,7 @@ def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -
     try:
         job = db.get(Job, job_id)
         job.status = "processing"
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = datetime.now(UTC)
         db.commit()
         logger.info("transcribe.started")
 
@@ -144,7 +143,7 @@ def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -
 
         job.status = "done"
         job.duration = result.duration
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = datetime.now(UTC)
         db.commit()
         logger.info(
             "transcribe.completed",
@@ -162,7 +161,7 @@ def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -
         if job is not None:
             job.status = "failed"
             job.error_message = str(e)
-            job.finished_at = datetime.now(timezone.utc)
+            job.finished_at = datetime.now(UTC)
             db.commit()
         logger.error("transcribe.failed", error=str(e))
         raise

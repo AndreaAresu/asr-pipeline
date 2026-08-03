@@ -6,9 +6,8 @@ called `/transcribe` and want to know whether the job has completed.
 
 from fastapi import APIRouter, HTTPException
 
-from app.db.session import SessionLocal
 from app.db.models import Job, Transcript
-
+from app.db.session import SessionLocal
 
 router = APIRouter()
 
