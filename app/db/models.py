@@ -53,6 +53,9 @@ class Transcript(Base):
 
     job: Mapped["Job"] = relationship(back_populates="transcript")
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="transcript", cascade="all, delete-orphan")
+    summary: Mapped["Summary | None"] = relationship(
+        back_populates="transcript", uselist=False, cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"Transcript(id={self.id}, job_id={self.job_id}, language={self.language})"
@@ -93,7 +96,42 @@ class Chunk(Base):
     def __repr__(self) -> str:
         return f"Chunk(id={self.id}, transcript_id={self.transcript_id}, chunk_index={self.chunk_index})"
 
+class Summary(Base):
+    """Cached LLM summary of a transcript.
+
+    Summarization is the only part of the pipeline that costs money and
+    seconds per call, and its input (the transcript) never changes once
+    written — so the result is cached rather than recomputed. The
+    transcript id doubles as the primary key, which makes "one summary
+    per transcript" a constraint the database enforces rather than
+    something the endpoint has to remember.
+
+    `summary_json` holds the model's structured output verbatim: the
+    thematic `sections` (each with title, start/end seconds and key
+    points) plus a `_meta` block recording the model and token counts
+    that produced it, kept for cost auditing.
+    """
+
+    __tablename__ = "summaries"
+
+    transcript_id: Mapped[str] = mapped_column(String, ForeignKey("transcripts.id"), primary_key=True)
+    summary_json: Mapped[dict] = mapped_column(JSONB)
+    model_used: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    transcript: Mapped["Transcript"] = relationship(back_populates="summary")
+
+    def __repr__(self) -> str:
+        return f"Summary(transcript_id={self.transcript_id}, model_used={self.model_used})"
+
+
 class ApiKey(Base):
+    """An API key, stored only as the SHA-256 hash of its plaintext.
+
+    `daily_minute_quota` is the key's allowance of *audio minutes* per
+    rolling 24h window (see `app.core.rate_limit`), not a request count —
+    a long upload costs proportionally more than a short one.
+    """
 
     __tablename__ = "api_keys"
 
