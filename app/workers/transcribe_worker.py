@@ -9,9 +9,11 @@ from datetime import datetime, timedelta, timezone
 
 import structlog
 
-from app.core.asr import ASRModel
+from app.core.asr import ASRModel, TranscriptSegment
+from app.core.chunking import chunk_segments
+from app.core.embeddings import embed_batch
 from app.core.logging import setup_logging, logger
-from app.db.models import Job, Transcript
+from app.db.models import Chunk, Job, Transcript
 from app.db.session import SessionLocal
 
 
@@ -46,6 +48,43 @@ def reap_stale_jobs() -> int:
         return len(stale)
     finally:
         db.close()
+
+
+def index_chunks(db, transcript_id: str, segments: list[TranscriptSegment]) -> int:
+    """Chunk, embed and persist a transcript's segments for search.
+
+    Splits the Whisper segments into overlapping time windows, embeds all
+    of them in a single batch (much faster than one call per chunk), and
+    adds a `Chunk` row per window. The rows are added to `db` but not
+    committed — the caller commits them together with the job's final
+    state, so a transcript is never marked `done` with a half-written
+    index.
+
+    Args:
+        db: Open session; rows are added to it, not committed.
+        transcript_id: Owning transcript, already flushed so its id exists.
+        segments: Ordered Whisper segments to index.
+
+    Returns:
+        Number of chunks indexed.
+    """
+    chunks = list(chunk_segments(segments))
+    if not chunks:
+        return 0
+
+    embeddings = embed_batch([c["text"] for c in chunks])
+    for chunk, embedding in zip(chunks, embeddings):
+        db.add(
+            Chunk(
+                transcript_id=transcript_id,
+                chunk_index=chunk["chunk_index"],
+                start_sec=chunk["start_sec"],
+                end_sec=chunk["end_sec"],
+                text=chunk["text"],
+                embedding=embedding,
+            )
+        )
+    return len(chunks)
 
 
 def get_asr() -> ASRModel:
@@ -98,6 +137,11 @@ def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -
             word_timestamps=[s.model_dump() for s in result.segments],
         )
         db.add(transcript)
+        # Flush so transcript.id is assigned before the chunks reference it.
+        db.flush()
+
+        indexed = index_chunks(db, transcript.id, result.segments)
+
         job.status = "done"
         job.duration = result.duration
         job.finished_at = datetime.now(timezone.utc)
@@ -106,12 +150,20 @@ def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -
             "transcribe.completed",
             duration=result.duration,
             language=result.language,
+            transcript_id=transcript.id,
+            chunks_indexed=indexed,
         )
     except Exception as e:
-        job.status = "failed"
-        job.error_message = str(e)
-        job.finished_at = datetime.now(timezone.utc)
-        db.commit()
+        # Discard whatever partial state the failed unit of work left in the
+        # session (a half-written transcript, an aborted transaction) before
+        # recording the failure, otherwise this commit fails too.
+        db.rollback()
+        job = db.get(Job, job_id)
+        if job is not None:
+            job.status = "failed"
+            job.error_message = str(e)
+            job.finished_at = datetime.now(timezone.utc)
+            db.commit()
         logger.error("transcribe.failed", error=str(e))
         raise
     finally:
