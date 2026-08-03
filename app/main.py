@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from app.api.transcribe import router as transcribe_router
 from app.api.jobs import router as jobs_router
 from app.api.search import router as search_router
+from app.api.summarize import router as summarize_router
 from app.config import settings
 from app.core.logging import setup_logging, logger
 
@@ -50,6 +51,7 @@ async def request_context(request: Request, call_next):
 app.include_router(jobs_router)
 app.include_router(transcribe_router)
 app.include_router(search_router)
+app.include_router(summarize_router)
 
 
 @app.get("/health")

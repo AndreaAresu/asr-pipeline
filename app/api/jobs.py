@@ -51,9 +51,11 @@ def get_result(job_id: str):
         job_id: UUID of a job whose `status == 'done'`.
 
     Returns:
-        A JSON object with `full_text`, detected `language`, and
-        `segments` (per-segment text with word-level alignment, as stored
-        in `Transcript.word_timestamps`).
+        A JSON object with `transcript_id` (the handle `/search` results
+        and `/summarize/{transcript_id}` are keyed by — distinct from the
+        job id), `full_text`, detected `language`, and `segments`
+        (per-segment text with word-level alignment, as stored in
+        `Transcript.word_timestamps`).
 
     Raises:
         HTTPException: 404 if the job does not exist; 400 if the job
@@ -70,6 +72,7 @@ def get_result(job_id: str):
     t = db.query(Transcript).filter_by(job_id=job_id).first()
     db.close()
     return {
+        "transcript_id": t.id,
         "full_text": t.full_text,
         "language": t.language,
         "segments": t.word_timestamps,
