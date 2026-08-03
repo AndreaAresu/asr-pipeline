@@ -134,7 +134,26 @@ deployed hardware, which will be slower.
 |---|---|---|---|
 | `POST /transcribe` → `done`, 30s audio | 16.1 s | 30.8 s | 3 |
 | `POST /search`, top_k=5 | 58 ms | 236 ms | 9 |
-| `POST /summarize` | not measured — needs a Groq key | | |
+
+Measured separately on one **60-minute** recording (a Lex Fridman episode),
+which is the case that exercises every limit at once:
+
+| | |
+|---|---|
+| Transcription, end to end | **28 min** (~0.47x real time) |
+| Peak worker memory | **1.42 GB** |
+| Output | 10,789 words · 1,384 segments · 102 chunks |
+| Chunk coverage | full 3,600 s, mean chunk 46.4 s |
+| `POST /summarize`, cache miss | 4.1 s · 6,659 input tokens |
+| `POST /summarize`, cache hit | **62 ms** |
+
+### Memory: the number that decides your VM size
+
+A 1-hour recording needs **~1.5 GB** in the worker, and Whisper allocates
+it in the first minute. In a Docker VM capped at 3.8 GB and shared with
+Postgres, the forking worker was OOM-killed 78 seconds in — before
+transcribing anything. Size the worker at **2 GB minimum**, which is what
+`fly.worker.toml` requests; the API needs a fraction of that.
 
 Reading these honestly: transcription is roughly **0.5–1x real time** on
 CPU, and the spread between P50 and P95 is queue wait, not model speed —
@@ -171,6 +190,16 @@ Known and deliberate:
   post-backfill step, noted in `app/db/models.py`.
 - **Groq free tier rate-limits** at roughly 30 requests/minute. Fine for a
   demo, not for load testing.
+- **Long transcripts are thinned before summarizing.** Past ~10k tokens
+  the transcript sent to the LLM keeps every Nth segment rather than all
+  of them, because a multi-hour recording exceeds the free tier's token
+  budget outright. Coverage of the full running time is preserved and the
+  response reports `transcript_thinned`, but the reading is coarser. A
+  1-hour episode keeps 692 of 1,384 segments.
+- **A killed worker is only detected where there is a work-horse.** On
+  Linux an OOM-killed job is marked `failed` within seconds. Under
+  macOS's non-forking `SimpleWorker` the job dies with the process, and
+  the startup reaper is the only backstop.
 
 ## Development
 
