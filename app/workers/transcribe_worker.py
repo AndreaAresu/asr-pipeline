@@ -19,32 +19,50 @@ from app.db.session import SessionLocal
 setup_logging()
 
 # A work-horse that dies without running its `finally` (OOM, SIGKILL, the
-# macOS fork crash) leaves its job in `processing` forever. RQ's job_timeout
-# is 600s, so any job still `processing` well past that can never complete.
-STALE_PROCESSING_TIMEOUT = timedelta(seconds=900)
+# macOS fork crash) leaves its job in `processing` forever.
+#
+# How long "forever" starts depends on the recording: the enqueued timeout
+# scales with audio duration (see `job_timeout_for`), so a 4-hour interview
+# is legitimately `processing` for hours. A fixed cutoff would reap it
+# mid-transcription and report a failure that never happened. The budget
+# below mirrors the enqueue-side timeout, plus a grace margin.
+STALE_TIMEOUT_FACTOR = 5
+MIN_STALE_TIMEOUT = timedelta(seconds=900)
+STALE_GRACE = timedelta(seconds=300)
+
+
+def stale_cutoff_for(duration_sec: float | None) -> timedelta:
+    """Return how long a job of this length may sit in `processing`."""
+    budget = timedelta(seconds=(duration_sec or 0) * STALE_TIMEOUT_FACTOR)
+    return max(MIN_STALE_TIMEOUT, budget) + STALE_GRACE
 
 _asr: ASRModel | None = None
 
 
 def reap_stale_jobs() -> int:
-    """Fail jobs stuck in `processing` past `STALE_PROCESSING_TIMEOUT`.
+    """Fail jobs stuck in `processing` past the budget for their length.
 
     Called at worker startup to clean up rows orphaned by a previous
-    worker that was killed mid-job. Returns the number of jobs reaped.
+    worker that was killed mid-job. Each job is judged against
+    `stale_cutoff_for(its own duration)`, so a long recording is not
+    mistaken for a dead one. Returns the number of jobs reaped.
     """
-    cutoff = datetime.now(UTC) - STALE_PROCESSING_TIMEOUT
+    now = datetime.now(UTC)
     db = SessionLocal()
     try:
-        stale = db.query(Job).filter(
-            Job.status == "processing",
-            Job.started_at < cutoff,
-        ).all()
-        for job in stale:
+        processing = db.query(Job).filter(Job.status == "processing").all()
+        reaped = 0
+        for job in processing:
+            if job.started_at is None:
+                continue
+            if now - job.started_at <= stale_cutoff_for(job.duration):
+                continue
             job.status = "failed"
             job.error_message = "worker terminated before completion"
-            job.finished_at = datetime.now(UTC)
+            job.finished_at = now
+            reaped += 1
         db.commit()
-        return len(stale)
+        return reaped
     finally:
         db.close()
 

@@ -27,6 +27,24 @@ router = APIRouter()
 _redis = Redis.from_url(settings.redis_url)
 _queue = Queue("transcribe", connection=_redis)
 
+# Whisper on CPU runs at roughly 0.5-1x real time, so transcription time is
+# proportional to the recording, not constant. A fixed timeout is therefore
+# wrong at both ends: generous for a 30s clip and fatal for a 1h interview,
+# where RQ would kill the work-horse mid-job and leave the row orphaned in
+# `processing` until the reaper catches it.
+TRANSCRIBE_TIMEOUT_FACTOR = 5
+MIN_TRANSCRIBE_TIMEOUT = 600
+
+
+def job_timeout_for(duration_sec: float) -> int:
+    """Return the RQ timeout to allow for `duration_sec` of audio.
+
+    Five times the audio duration, floored at ten minutes: comfortably
+    above the ~1-2x observed on CPU, while still bounding a job that has
+    genuinely hung rather than letting it occupy the worker forever.
+    """
+    return max(MIN_TRANSCRIBE_TIMEOUT, int(duration_sec * TRANSCRIBE_TIMEOUT_FACTOR))
+
 
 @router.post("/transcribe", status_code=202)
 async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
@@ -105,9 +123,10 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
         raise
 
     request_id = structlog.contextvars.get_contextvars().get("request_id")
+    timeout = job_timeout_for(duration)
     _queue.enqueue(
         transcribe_job, job_id,
-        file_path=tmp_path, request_id=request_id, job_timeout=600,
+        file_path=tmp_path, request_id=request_id, job_timeout=timeout,
     )
     logger.info(
         "transcribe.enqueued",
@@ -115,5 +134,6 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
         api_key_hash=api_key.key_hash,
         filename=audio.filename,
         duration=duration,
+        job_timeout=timeout,
     )
     return {"job_id": job_id, "status": "queued"}
