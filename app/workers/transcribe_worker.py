@@ -36,6 +36,78 @@ def stale_cutoff_for(duration_sec: float | None) -> timedelta:
     budget = timedelta(seconds=(duration_sec or 0) * STALE_TIMEOUT_FACTOR)
     return max(MIN_STALE_TIMEOUT, budget) + STALE_GRACE
 
+
+def killing_signal(ret_val: object) -> int | None:
+    """Extract the killing signal from a wait status, if there is one.
+
+    RQ passes `None` on the paths where it noticed the death without
+    reaping a wait status, so the value cannot be assumed numeric — doing
+    the arithmetic unguarded raises, and the failure being reported is
+    lost along with it.
+    """
+    if not isinstance(ret_val, int):
+        return None
+    return ret_val & 0xFF
+
+
+def termination_reason(signal_number: int | None) -> str:
+    """Phrase why a job died, naming the signal when it is known."""
+    killed_by = f"by signal {signal_number} " if signal_number is not None else ""
+    return (
+        f"worker process terminated {killed_by}before it could report; "
+        "on a memory-constrained host this is usually the OOM killer"
+    )
+
+
+def handle_work_horse_killed(rq_job, retpid: int | None, ret_val: int | None, rusage) -> None:
+    """Record a job whose work-horse died before it could report anything.
+
+    When the work-horse is killed outright — the OOM killer, SIGKILL, a
+    segfault in a native library — no Python inside it runs. The task's own
+    `except` block never fires, so the row keeps claiming `processing` and
+    a polling client waits forever on a job that is already dead.
+
+    This must be a *worker*-level hook, not the job's `on_failure`
+    callback: RQ runs failure callbacks inside the work-horse, which is
+    precisely the process that just died. `Worker(work_horse_killed_handler=...)`
+    runs here, in the parent, which survives.
+
+    Deliberately defensive — an exception raised here would be reported
+    instead of the failure it is trying to record.
+
+    Args:
+        rq_job: The RQ job whose work-horse died; its first argument is
+            our `Job.id`.
+        retpid: PID of the dead work-horse, or None when RQ noticed the
+            death by a route that never reaped a wait status.
+        ret_val: Its wait status, or None as above. When present, the low
+            byte carries the killing signal.
+        rusage: Resource usage of the dead process (unused).
+    """
+    try:
+        job_id = rq_job.args[0]
+        signal_number = killing_signal(ret_val)
+        reason = termination_reason(signal_number)
+
+        db = SessionLocal()
+        try:
+            job = db.get(Job, job_id)
+            # Only claim the job if it never reached a terminal state — the
+            # task's own handler is more specific, and wins when it ran.
+            if job is not None and job.status not in ("done", "failed"):
+                job.status = "failed"
+                job.error_message = reason
+                job.finished_at = datetime.now(UTC)
+                db.commit()
+                logger.error(
+                    "transcribe.abandoned", job_id=job_id, signal=signal_number, pid=retpid
+                )
+        finally:
+            db.close()
+    except Exception as e:  # pragma: no cover - must never mask the real failure
+        logger.error("transcribe.kill_handler_failed", error=str(e))
+
+
 _asr: ASRModel | None = None
 
 

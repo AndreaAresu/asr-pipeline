@@ -23,7 +23,7 @@ from rq import Queue, SimpleWorker, Worker
 
 from app.config import settings
 from app.core.logging import logger, setup_logging
-from app.workers.transcribe_worker import reap_stale_jobs
+from app.workers.transcribe_worker import handle_work_horse_killed, reap_stale_jobs
 
 
 def main() -> None:
@@ -39,7 +39,15 @@ def main() -> None:
     worker_cls = SimpleWorker if sys.platform == "darwin" else Worker
     logger.info("worker.starting", worker_class=worker_cls.__name__, queue="transcribe")
 
-    worker = worker_cls([queue], connection=redis)
+    # Only the forking worker has a work-horse to lose. SimpleWorker runs the
+    # job in this very process, so a kill takes the handler down with it —
+    # nothing can record the failure from inside a dead process, and on macOS
+    # the startup reaper remains the only backstop.
+    kwargs = {}
+    if worker_cls is Worker:
+        kwargs["work_horse_killed_handler"] = handle_work_horse_killed
+
+    worker = worker_cls([queue], connection=redis, **kwargs)
     worker.work()
 
 
