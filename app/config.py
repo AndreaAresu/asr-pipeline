@@ -21,6 +21,13 @@ class Settings(BaseSettings):
         default="/tmp/asr-pipeline",
         description="Directory where uploaded audio files are buffered during transcription.",
     )
+    embedding_model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description=(
+            "sentence-transformers model used to embed chunks and search queries. "
+            "Must output 384 dimensions to match the chunks.embedding column."
+        ),
+    )
     postgres_user: str = Field(description="Postgres role used by the application.")
     postgres_password: str = Field(description="Password for `postgres_user`.")
     postgres_db: str = Field(description="Database name on the Postgres instance.")
