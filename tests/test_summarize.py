@@ -7,7 +7,7 @@ before it is trusted.
 
 import re
 
-from app.core.summarize import _sanitise_sections, format_transcript_for_llm
+from app.core.summarize import _sanitise_sections, format_transcript_for_llm, thin_segments
 
 MARKER = re.compile(r"\[(\d+\.\d)s\]")
 
@@ -100,6 +100,44 @@ def test_a_non_list_payload_yields_no_sections():
 def test_untitled_sections_get_a_placeholder():
     sections = _sanitise_sections([{"start_sec": 0, "end_sec": 5, "key_points": []}], duration=10.0)
     assert sections[0]["title"] == "Untitled section"
+
+
+def long_segments(count: int, chars: int = 60):
+    """Segments of a fixed text length, 5s apart — a stand-in for a long interview."""
+    return [
+        {"start": i * 5.0, "end": i * 5.0 + 5.0, "text": "x" * chars}
+        for i in range(count)
+    ]
+
+
+def test_a_short_transcript_is_left_alone():
+    segments = long_segments(10)
+    kept, thinned = thin_segments(segments, max_chars=40_000)
+    assert thinned is False
+    assert kept == segments
+
+
+def test_an_overlong_transcript_is_thinned_within_budget():
+    kept, thinned = thin_segments(long_segments(2880), max_chars=40_000)
+    assert thinned is True
+    assert sum(len(s["text"]) for s in kept) <= 40_000
+
+
+def test_thinning_preserves_coverage_of_the_whole_recording():
+    """The failure this guards against: summarizing only the opening.
+
+    Truncation would keep the first N characters and report the result as
+    a summary of the whole thing. Thinning must still reach the end.
+    """
+    segments = long_segments(2880)
+    kept, _ = thin_segments(segments, max_chars=40_000)
+    total_span = segments[-1]["end"] - segments[0]["start"]
+    kept_span = kept[-1]["end"] - kept[0]["start"]
+    assert kept_span > total_span * 0.95
+
+
+def test_thinning_an_empty_transcript_is_safe():
+    assert thin_segments([], max_chars=100) == ([], False)
 
 
 def test_section_count_is_capped():

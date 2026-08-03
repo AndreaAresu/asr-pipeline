@@ -21,6 +21,7 @@ nicety, and it is far easier to record from the start than to backfill.
 """
 
 import json
+import math
 from typing import Any
 
 from groq import Groq
@@ -31,6 +32,18 @@ from app.core.logging import logger
 
 MARKER_INTERVAL = 30.0
 MAX_SECTIONS = 5
+
+# Roughly four characters per token, so this is ~10k tokens of transcript —
+# comfortably inside the Groq free tier's per-minute token budget, which a
+# multi-hour recording would otherwise blow straight through (a 4-hour
+# interview is ~40k words, ~60k tokens).
+#
+# Past this size the transcript is *thinned* rather than truncated: keeping
+# the first N characters would summarize only the opening and silently
+# report it as a summary of the whole thing. Dropping every Nth segment
+# instead keeps coverage across the full running time, at the cost of
+# detail — and the timestamps that survive are still real ones.
+MAX_TRANSCRIPT_CHARS = 40_000
 
 SYSTEM_PROMPT = """\
 You are an expert at summarizing conversation transcripts.
@@ -109,6 +122,30 @@ def format_transcript_for_llm(segments: list[Any], marker_interval: float = MARK
     return " ".join(parts)
 
 
+def thin_segments(segments: list[Any], max_chars: int = MAX_TRANSCRIPT_CHARS) -> tuple[list[Any], bool]:
+    """Reduce segments to fit `max_chars`, keeping coverage of the whole span.
+
+    Keeps every Nth segment, where N is chosen so the surviving text fits
+    the budget. The result still starts near the beginning and ends near
+    the end of the recording, so the model sees the shape of the whole
+    conversation rather than a detailed view of its first few minutes.
+
+    Args:
+        segments: Ordered Whisper segments.
+        max_chars: Character budget for the rendered transcript.
+
+    Returns:
+        `(segments, thinned)` — the original list and False when it
+        already fits.
+    """
+    total = sum(len(str(segment_field(s, "text"))) for s in segments)
+    if total <= max_chars or not segments:
+        return segments, False
+
+    stride = math.ceil(total / max_chars)
+    return segments[::stride], True
+
+
 def _sanitise_sections(sections: Any, duration: float) -> list[dict]:
     """Coerce the model's sections into a well-formed, in-range list.
 
@@ -168,7 +205,10 @@ def summarize_transcript(segments: list[Any], duration: float) -> dict:
             failure can be diagnosed.
     """
     client = get_client()
+    segments, thinned = thin_segments(segments)
     transcript_text = format_transcript_for_llm(segments)
+    if thinned:
+        logger.info("summarize.transcript_thinned", segments_kept=len(segments), chars=len(transcript_text))
 
     response = client.chat.completions.create(
         model=settings.summarize_model,
@@ -195,5 +235,9 @@ def summarize_transcript(segments: list[Any], duration: float) -> dict:
             "model": settings.summarize_model,
             "input_tokens": usage.prompt_tokens,
             "output_tokens": usage.completion_tokens,
+            # Surfaced to the caller: a summary built from a thinned
+            # transcript is a coarser reading, and pretending otherwise
+            # would be dishonest about what the sections are based on.
+            "transcript_thinned": thinned,
         },
     }
