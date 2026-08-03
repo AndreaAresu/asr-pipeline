@@ -1,0 +1,40 @@
+# Fly.io config for the transcription worker.
+#
+#   flyctl deploy -c fly.worker.toml
+#
+# Same image as the API, different command and a much bigger VM — Whisper
+# runs here. No [http_service]: the worker exposes nothing, it only pulls
+# from Redis.
+
+app = "asr-worker-andrea"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# No [deploy] release_command: the API app owns migrations. Two apps
+# racing to migrate the same database is a good way to corrupt it.
+
+[env]
+  HF_HOME = "/cache/huggingface"
+  TEMP_AUDIO_DIR = "/var/spool/asr"
+
+[processes]
+  # app.workers.run, not `rq worker`: the entrypoint also reaps jobs left
+  # in `processing` by a machine that died mid-job, which a bare rq worker
+  # would leave stuck forever.
+  worker = "python -m app.workers.run"
+
+[[mounts]]
+  # Whisper is ~400MB and MiniLM ~22MB. Without a persistent volume every
+  # restart re-downloads them, which on a small VM is minutes of cold start.
+  source = "whisper_cache"
+  destination = "/cache/huggingface"
+  processes = ["worker"]
+
+[[vm]]
+  # Whisper on CPU is the bottleneck of the whole system; this is the one
+  # component worth paying for.
+  size = "shared-cpu-2x"
+  memory = "2048mb"
+  processes = ["worker"]
