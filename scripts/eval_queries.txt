@@ -1,0 +1,21 @@
+# Query set for scripts/search_eval.sh.
+#
+# Mix three kinds deliberately — the contrast between them is the signal:
+#   specific    named entities and technical terms that appear in the audio
+#   generic     broad themes the audio covers without naming them
+#   out-of-dist topics the audio does not cover at all; their top score
+#               should be visibly lower than the other two groups
+#
+# Replace these with queries matching whatever you actually indexed.
+
+# --- specific ---
+what did Obama achieve in 2008
+first black president
+
+# --- generic ---
+change in American politics
+what makes someone a historic figure
+
+# --- out of distribution ---
+how to bake sourdough bread
+kubernetes pod autoscaling

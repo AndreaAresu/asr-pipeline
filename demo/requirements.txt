@@ -1,0 +1,5 @@
+# Streamlit Community Cloud installs from this file. Keep it to the two
+# packages the demo actually needs — it is a thin HTTP client, and pulling
+# in the API's dependencies (torch, faster-whisper) would blow the build.
+streamlit>=1.40
+requests>=2.32

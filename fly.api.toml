@@ -1,0 +1,52 @@
+# Fly.io config for the API.
+#
+#   flyctl deploy -c fly.api.toml
+#
+# API and worker are separate Fly apps sharing one Dockerfile, so they
+# scale independently: the API is small and always-on, the worker is CPU-
+# and RAM-hungry and only it needs to grow. If the worker crashes under
+# load the API stays up and keeps accepting jobs.
+
+app = "asr-api-andrea"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Runs on a temporary machine with the new image before any instance is
+  # promoted, which is exactly the window you want migrations in: the new
+  # schema is live before the new code serves a request, and a failing
+  # migration aborts the deploy instead of half-breaking production.
+  release_command = "alembic upgrade head"
+
+[env]
+  HF_HOME = "/cache/huggingface"
+  TEMP_AUDIO_DIR = "/var/spool/asr"
+
+# Secrets are never listed here — set them out of band, where they are
+# injected as env vars at runtime and stay out of version control:
+#   flyctl secrets set --app asr-api-andrea \
+#     DATABASE_URL="postgresql+psycopg://…" \
+#     REDIS_URL="rediss://…" \
+#     GROQ_API_KEY="…"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # 0 lets the API suspend when idle, which keeps a demo inside the free
+  # allowance at the cost of a cold start on the first request.
+  min_machines_running = 0
+
+  [http_service.checks]
+    [[http_service.checks.http]]
+      path = "/health"
+      interval = "15s"
+      timeout = "5s"
+      grace_period = "20s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

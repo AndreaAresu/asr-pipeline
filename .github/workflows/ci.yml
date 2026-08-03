@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # A new push supersedes the run in flight for the same ref.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # The test suite touches no services, but importing app.config requires
+      # a valid database configuration. Nothing ever connects to this.
+      DATABASE_URL: postgresql+psycopg://ci:ci@localhost:5432/ci
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        # --frozen fails if uv.lock is out of date with pyproject.toml, which
+        # catches a dependency edit that was never locked.
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test
+        run: uv run pytest
+
+# The end-to-end check (scripts/smoke_test.sh) is deliberately not run here:
+# it builds the full image and transcribes real audio, and the sample files
+# are gitignored. Run it locally before a release or a deploy.

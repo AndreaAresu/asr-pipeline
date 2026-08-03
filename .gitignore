@@ -8,7 +8,21 @@ wheels/
 
 # Virtual environments
 .venv
-*.mp4
+
+# Local audio samples — never commit media
+data/samples/*
+!data/samples/.gitkeep
 *.wav
+*.mp3
+*.m4a
+*.flac
+*.mp4
+
+# Secrets
 .env
-scripts/
+
+# Local agent instructions
+CLAUDE.md
+
+# Personal planning docs
+*.pdf

@@ -1,0 +1,26 @@
+# Keep the build context small and free of secrets. Anything not listed in
+# the Dockerfile's COPY lines never reaches the image anyway, but excluding
+# it here also keeps it from being uploaded to the builder.
+
+.git
+.github
+.venv
+__pycache__/
+*.py[oc]
+*.egg-info
+build/
+dist/
+
+# Secrets — the container gets its config from the environment.
+.env
+
+# Local media, planning docs, agent instructions.
+data/
+*.pdf
+CLAUDE.md
+
+# Demo is deployed separately on Streamlit Cloud.
+demo/
+
+.claude/
+.python-version

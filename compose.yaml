@@ -1,5 +1,15 @@
+# Full local stack: API, worker, Postgres+pgvector, Redis.
+#
+#   docker compose up -d --build
+#
+# API and worker run the same image and differ only in command. Both wait
+# for Postgres and Redis to report healthy — without that they start while
+# the databases are still booting and crash on their first connection.
+
 services:
   postgres:
+    # pgvector/pgvector, not plain postgres: the stock image has no vector
+    # extension and the chunks table cannot be created without it.
     image: pgvector/pgvector:pg16
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -9,11 +19,79 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
       - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    # Migrations run here, once, before the server binds. The worker does
+    # not migrate — two processes racing on the same DDL is how you get a
+    # half-applied schema.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080"
+    environment: &app_env
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Service names, not localhost: inside the compose network each
+      # container's localhost is itself.
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small.en}
+      TEMP_AUDIO_DIR: /var/spool/asr
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - hf_cache:/cache/huggingface
+      - audio_spool:/var/spool/asr
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  worker:
+    build: .
+    command: python -m app.workers.run
+    environment: *app_env
+    volumes:
+      # hf_cache is shared with the API so the Whisper and MiniLM weights
+      # download once, not once per service and not again on every restart.
+      - hf_cache:/cache/huggingface
+      # The API buffers uploads here and the worker reads them back; without
+      # a shared volume the worker looks for a file that only exists in the
+      # API container.
+      - audio_spool:/var/spool/asr
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Not service_healthy: the worker does not need the API to be serving,
+      # only to have run the migrations it is about to query against.
+      api:
+        condition: service_started
 
 volumes:
   pg_data:
+  hf_cache:
+  audio_spool:
