@@ -1,7 +1,7 @@
 [project]
 name = "asr-pipeline"
 version = "0.1.0"
-description = "Add your description here"
+description = "Async speech-to-text service with semantic search and LLM summarization"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -10,6 +10,7 @@ dependencies = [
     "faster-whisper>=1.2.1",
     "groq>=0.11",
     "pgvector>=0.3",
+    "prometheus-client>=0.26.0",
     "psycopg[binary]>=3.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
@@ -21,3 +22,46 @@ dependencies = [
     "structlog>=26.1.0",
     "uvicorn>=0.47.0",
 ]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.1",
+]
+
+# sentence-transformers pulls torch, and on Linux the default wheel drags in
+# ~9GB of CUDA libraries. The worker runs Whisper and MiniLM on CPU and never
+# touches a GPU, so the CPU-only build is used there instead — it cuts the
+# container image from ~11.6GB to ~2.5GB, which is the difference between a
+# deploy that completes and one that times out.
+# Scoped to Linux: macOS wheels are CPU-only already, so local development is
+# untouched.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# pycodestyle errors, pyflakes, import sorting, modern-syntax upgrades and
+# the bugbear checks that catch real mistakes (mutable defaults, unused
+# loop variables) rather than style opinions.
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+# B008 flags function calls in argument defaults, which is exactly how
+# FastAPI dependencies are declared (`= Depends(get_api_key)`).
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The project is not installed as a distribution (no build-system), so the
+# repo root has to be on sys.path for `import app` to resolve.
+pythonpath = ["."]
+# Everything under tests/ that needs Postgres, Redis or a model belongs in
+# scripts/smoke_test.sh instead; these must stay runnable with no services.
+addopts = "-q"
