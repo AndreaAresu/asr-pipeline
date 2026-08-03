@@ -10,19 +10,18 @@ import os
 import uuid
 
 import structlog
-from fastapi import APIRouter, UploadFile, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from redis import Redis
 from rq import Queue
 from starlette.concurrency import run_in_threadpool
 
+from app.config import settings
 from app.core.auth import get_api_key
 from app.core.logging import logger
-from app.core.rate_limit import probe_duration, enforce_quota
-from app.workers.transcribe_worker import transcribe_job
-from app.db.session import SessionLocal
+from app.core.rate_limit import enforce_quota, probe_duration
 from app.db.models import ApiKey, Job
-from app.config import settings
-
+from app.db.session import SessionLocal
+from app.workers.transcribe_worker import transcribe_job
 
 router = APIRouter()
 _redis = Redis.from_url(settings.redis_url)
@@ -64,7 +63,12 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
         )
         raise HTTPException(400, 'unsupported audio format')
     job_id = str(uuid.uuid4())
-    tmp_path = f'/tmp/{job_id}_{audio.filename}'
+    # The worker is a different process — and under compose a different
+    # container — so the upload has to land somewhere both of them can see.
+    # temp_audio_dir is that shared spool; the worker deletes the file when
+    # the job ends.
+    os.makedirs(settings.temp_audio_dir, exist_ok=True)
+    tmp_path = os.path.join(settings.temp_audio_dir, f"{job_id}_{os.path.basename(audio.filename)}")
     with open(tmp_path, 'wb') as buffer:
         buffer.write(await audio.read())
 
