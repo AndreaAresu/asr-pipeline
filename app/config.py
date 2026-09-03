@@ -25,6 +25,23 @@ class Settings(BaseSettings):
         default="/tmp/asr-pipeline",
         description="Directory where uploaded audio files are buffered during transcription.",
     )
+    max_upload_mb: int = Field(
+        default=500,
+        description=(
+            "Largest upload accepted by POST /transcribe, in megabytes; 0 disables the check. "
+            "Enforced while the bytes are being written, not afterwards, because the duration "
+            "check that follows can only run once the whole file has landed. Lower it sharply "
+            "on a public deployment: without it one request can fill the disk."
+        ),
+    )
+    max_audio_seconds: int = Field(
+        default=0,
+        description=(
+            "Longest recording accepted by POST /transcribe, in seconds; 0 disables the check. "
+            "Off by default so local indexing of long recordings works, and set low on a public "
+            "deployment, where transcription is minutes of CPU a visitor waits through."
+        ),
+    )
     embedding_model: str = Field(
         default="all-MiniLM-L6-v2",
         description=(

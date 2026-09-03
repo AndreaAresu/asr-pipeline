@@ -46,6 +46,57 @@ def job_timeout_for(duration_sec: float) -> int:
     return max(MIN_TRANSCRIBE_TIMEOUT, int(duration_sec * TRANSCRIBE_TIMEOUT_FACTOR))
 
 
+# Size of each block read from the upload stream. Small enough that the cap
+# below is enforced long before a large body is in memory, large enough that
+# a legitimate 30MB podcast is not thousands of round trips.
+SPOOL_CHUNK_BYTES = 1024 * 1024
+
+
+async def _spool_upload(audio: UploadFile, tmp_path: str) -> None:
+    """Stream the upload to `tmp_path`, refusing it once it exceeds the cap.
+
+    The check runs per block, not after the write. Reading the whole body
+    first — `await audio.read()` with no argument — hands the caller the
+    disk and the process memory before anything has a chance to object,
+    which matters here because the duration check that follows can only run
+    once the file has landed. The quota is measured in audio minutes and is
+    therefore always post-upload; this is the only limit that can act while
+    the bytes are still arriving.
+
+    Raises:
+        HTTPException: 413 if the upload is larger than
+            `settings.max_upload_mb` (which is disabled when set to 0).
+    """
+    limit = settings.max_upload_mb * 1024 * 1024
+    written = 0
+    with open(tmp_path, "wb") as buffer:
+        while block := await audio.read(SPOOL_CHUNK_BYTES):
+            written += len(block)
+            if limit and written > limit:
+                raise HTTPException(
+                    413, f"upload exceeds the {settings.max_upload_mb} MB limit"
+                )
+            buffer.write(block)
+
+
+def _enforce_duration_limit(duration: float) -> None:
+    """Reject a recording longer than `settings.max_audio_seconds`.
+
+    Separate from the quota, which bounds how much audio a key may submit
+    per day: this bounds a single recording, because on a small public
+    deployment one long upload occupies the only worker for minutes while
+    everyone else queues behind it.
+
+    Raises:
+        HTTPException: 413 if the recording is too long (disabled at 0).
+    """
+    limit = settings.max_audio_seconds
+    if limit and duration > limit:
+        raise HTTPException(
+            413, f"audio is {duration:.0f}s long; the limit is {limit}s"
+        )
+
+
 @router.post("/transcribe", status_code=202)
 async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
     """Accept an audio upload and enqueue the transcription work.
@@ -69,8 +120,10 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
     Raises:
         HTTPException: 401 if the `X-API-Key` header is missing or
             invalid; 400 if the file extension is not supported or its
-            duration cannot be read; 429 if the caller's rolling 24h
-            audio quota would be exceeded.
+            duration cannot be read; 413 if the upload is larger than
+            `max_upload_mb` or the recording longer than
+            `max_audio_seconds`; 429 if the caller's rolling 24h audio
+            quota would be exceeded.
     """
     if not audio.filename.endswith(('.wav', '.mp3', '.m4a', '.flac', '.mp4')):
         logger.info(
@@ -87,13 +140,15 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
     # the job ends.
     os.makedirs(settings.temp_audio_dir, exist_ok=True)
     tmp_path = os.path.join(settings.temp_audio_dir, f"{job_id}_{os.path.basename(audio.filename)}")
-    with open(tmp_path, 'wb') as buffer:
-        buffer.write(await audio.read())
 
-    # Measure the upload and check the caller's quota before accepting the
-    # job; clean up the temp file if either step rejects the request.
+    # Spool the upload, measure it, and check the caller's limits before
+    # accepting the job. Everything that can reject the request lives inside
+    # this block so that a partially written file is removed on every one of
+    # those paths, not only on the ones that come after the write.
     try:
+        await _spool_upload(audio, tmp_path)
         duration = await run_in_threadpool(probe_duration, tmp_path)
+        _enforce_duration_limit(duration)
 
         db = SessionLocal()
         try:

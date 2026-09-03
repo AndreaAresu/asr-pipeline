@@ -51,6 +51,9 @@ def test_a_request_id_is_minted_when_absent(client):
     ("method", "path", "kwargs"),
     [
         ("post", "/search", {"json": {"query": "x"}}),
+        # Unauthenticated, this one spends CPU and disk on a stranger's file
+        # before anything else in the request has been looked at.
+        ("post", "/transcribe", {"files": {"audio": ("a.wav", b"x", "audio/wav")}}),
         ("post", "/summarize/some-id", {}),
         # Listing jobs is scoped to the caller's key, so it must require one.
         ("get", "/jobs", {}),
