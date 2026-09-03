@@ -1,0 +1,35 @@
+# Reverse proxy for the single-host deployment.
+#
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#
+# Caddy runs on the host, not as a compose service, so `docker compose down`
+# cannot take TLS down with it — the certificate and its renewal outlive any
+# restart of the application.
+#
+# The hostname is the server's IPv4 with dashes instead of dots, under
+# sslip.io, which resolves any such name to the address encoded in it. That
+# gives a real public DNS name with no domain to buy, and one Let's Encrypt
+# will issue a certificate for. Replace the address below if the server moves.
+#
+# compose binds every port to 127.0.0.1, so Postgres and Redis are not
+# reachable from outside and the API is reachable only through this proxy.
+
+api.159-195-250-205.sslip.io {
+	# /metrics declares no API key dependency — deliberately, so a scraper on
+	# the same host can read it without a credential. On a public address that
+	# would publish queue depths and job counts to anyone who asks.
+	#
+	# 404 rather than 403, for the same reason the job routes answer 404 to a
+	# caller who does not own the job: 403 would confirm there is something
+	# there worth coming back for.
+	respond /metrics 404
+
+	reverse_proxy 127.0.0.1:8080
+}
+
+# The Streamlit demo gets its own hostname once it runs as a compose service.
+# Kept here as a reminder that the second name needs no DNS work either:
+#
+# demo.159-195-250-205.sslip.io {
+# 	reverse_proxy 127.0.0.1:8501
+# }

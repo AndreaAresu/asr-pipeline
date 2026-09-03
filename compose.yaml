@@ -11,6 +11,10 @@ services:
     # pgvector/pgvector, not plain postgres: the stock image has no vector
     # extension and the chunks table cannot be created without it.
     image: pgvector/pgvector:pg16
+    # `unless-stopped`, not `always`: a reboot or a crashed container comes
+    # back on its own, which is what a deployed host needs, but a deliberate
+    # `docker compose stop` stays stopped instead of being undone at boot.
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -27,6 +31,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
@@ -37,6 +42,7 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     # Migrations run here, once, before the server binds. The worker does
     # not migrate — two processes racing on the same DDL is how you get a
     # half-applied schema.
@@ -71,6 +77,7 @@ services:
 
   worker:
     build: .
+    restart: unless-stopped
     command: python -m app.workers.run
     environment: *app_env
     volumes:
