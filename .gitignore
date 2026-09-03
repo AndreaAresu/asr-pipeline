@@ -20,6 +20,7 @@ data/samples/*
 
 # Secrets
 .env
+.scratch/
 
 # Local agent instructions
 CLAUDE.md
