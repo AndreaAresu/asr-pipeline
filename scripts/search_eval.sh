@@ -3,8 +3,12 @@
 # Retrieval quality harness for POST /search.
 #
 # Runs a list of queries against the API and prints, for each, the top-k
-# hits with score and time range — enough to eyeball whether retrieval is
-# sane before trusting it in a demo.
+# hits with score, source transcript and time range — enough to eyeball
+# whether retrieval is sane before trusting it in a demo.
+#
+# The transcript column is the one that catches a subtle failure: with more
+# than one recording indexed, a query can score plausibly while pulling from
+# the wrong episode entirely.
 #
 # Usage:
 #   ASR_API_KEY=<key> bash scripts/search_eval.sh [queries_file] [top_k]
@@ -47,7 +51,7 @@ while IFS= read -r query || [[ -n "$query" ]]; do
     | jq -r '
         if (.hits | length) == 0 then "   (no hits — nothing indexed?)"
         else .hits[]
-          | "   \(.score * 1000 | round / 1000)  [\(.start_sec | floor)s-\(.end_sec | floor)s]  \(.text[0:110])…"
+          | "   \(.score * 1000 | round / 1000)  \(.transcript_id[0:8])  [\(.start_sec | floor)s-\(.end_sec | floor)s]  \(.text[0:96])…"
         end'
   echo
 done < "$QUERIES_FILE"

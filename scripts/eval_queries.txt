@@ -6,15 +6,25 @@
 #   out-of-dist topics the audio does not cover at all; their top score
 #               should be visibly lower than the other two groups
 #
+# This set targets the three NASA "Houston We Have a Podcast" episodes
+# indexed for Run 2 (see search_eval.md). Their topics are deliberately
+# disjoint — lunar station engineering, microbiology, spaceflight history —
+# so a specific query also tests whether retrieval picks the RIGHT episode,
+# not just a plausible passage.
+#
 # Replace these with queries matching whatever you actually indexed.
 
 # --- specific ---
-what did Obama achieve in 2008
-first black president
+DNA sequencing on the space station
+the Lunar Link communication module
+Apollo 11 landing in July 1969
+European Space Agency contribution to Gateway
+studying viruses and outbreaks in Africa
 
 # --- generic ---
-change in American politics
-what makes someone a historic figure
+why go back to the moon
+what training an astronaut goes through
+doing science in microgravity
 
 # --- out of distribution ---
 how to bake sourdough bread
