@@ -408,7 +408,7 @@ with search_tab:
         "and would move with a different one."
     )
 
-    query = st.text_input("Query", placeholder="e.g. what makes intelligence hard to define")
+    query = st.text_input("Query", placeholder="e.g. what keeps astronauts healthy in orbit")
     top_k = st.slider("Results", min_value=1, max_value=10, value=5)
 
     if st.button("Search", type="primary") and query:

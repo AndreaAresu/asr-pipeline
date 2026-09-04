@@ -16,10 +16,11 @@ dist/
 
 # Local media, planning docs, agent instructions.
 data/
+docs/
 *.pdf
 CLAUDE.md
 
-# Demo is deployed separately on Streamlit Cloud.
+# The demo has its own image, built from ./demo as its own compose service.
 demo/
 
 .claude/
