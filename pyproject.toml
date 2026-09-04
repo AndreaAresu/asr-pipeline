@@ -36,8 +36,11 @@ dev = [
 
 # sentence-transformers pulls torch, and on Linux the default wheel drags in
 # ~9GB of CUDA libraries. The worker runs Whisper and MiniLM on CPU and never
-# touches a GPU, so the CPU-only build is used there instead — it cuts the
-# container image from ~11.6GB to ~2.5GB, which is the difference between a
+# touches a GPU, so the CPU-only build is used there instead: torch lands as
+# 750MB in the image rather than dragging the CUDA stack in behind it. The
+# image measured 11.6GB before this pin and 3.17GB after (the latter on the
+# deployed server, 2026-09-04, once the uv cache was also dropped from the
+# dependency layer — see the Dockerfile). That is the difference between a
 # deploy that completes and one that times out.
 # Scoped to Linux: macOS wheels are CPU-only already, so local development is
 # untouched.

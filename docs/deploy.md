@@ -151,12 +151,34 @@ passes it through; there is no copy inside the image.
 you run it from. That is not in the API image, so on a fresh server it is an
 `apt-get install jq` away.
 
-**Image size.** Measured at 5.05 GB, dominated by one 3.27 GB dependency
-layer: a 1.7 GB venv plus 1.4 GB of `uv` download cache baked in beside it.
-If it is ~11 GB instead, the CUDA build of torch got in — `pyproject.toml`
-pins the CPU-only wheel index for Linux, so check `uv.lock` is in sync and
-the build is not using a stale cache. Model weights must never be baked in;
-they live on the `hf_cache` volume.
+**Image size.** **3.17 GB** as `docker images` reports it, measured on this
+server on 2026-09-04. Compare like with like before concluding anything: the
+same image is 2.3 GB by `du -x /` inside the container and ~2.43 GB if you
+sum the `docker history` layers, because those count bytes and `docker
+images` counts the space they occupy — a venv is hundreds of thousands of
+small files, each rounded up to a block.
+
+The split, from `docker history asr-pipeline-api:latest`: 1.78 GB of
+dependency layer (torch alone is 750 MB, then transformers 109 MB, scipy
+108 MB, ctranslate2 135 MB across module and libs), 457 MB of ffmpeg and its
+libraries, 141 MB of Python base, 50 MB of `uv` binary. That is what CPU
+torch plus faster-whisper plus sentence-transformers costs; nothing obvious
+is left to cut.
+
+Two numbers say the build went wrong:
+
+- **~5 GB** — the `uv` download cache is baked into the image. `uv sync`
+  must clean it **in the same `RUN`**, since a later layer cannot shrink an
+  earlier one. This was the bug until 2026-09-04 and it was worth 1.4 GB:
+  `UV_LINK_MODE=copy` gives the venv its own copies, so every package sat in
+  the image twice. Confirm with `docker compose exec api du -sh /opt/venv
+  /root/.cache/uv` — the cache should be tens of kilobytes, not gigabytes.
+- **~11 GB** — the CUDA build of torch got in. `pyproject.toml` pins the
+  CPU-only wheel index for Linux, so check `uv.lock` is in sync and the
+  build is not using a stale cache.
+
+Model weights must never be baked in either way; they live on the
+`hf_cache` volume.
 
 **Everything on the machine is fine and the site is not.** Caddy runs on the
 host, not in compose, so `docker compose down` cannot take TLS with it —
