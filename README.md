@@ -8,9 +8,12 @@ top.
 ![Python](https://img.shields.io/badge/python-3.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-> **Status:** active development. The API surface below is implemented and
-> tested end to end locally. Public demo and deployment are not live yet —
-> see [Deployment](#deployment).
+> **Status:** live at **https://api.159-195-250-205.sslip.io** — browser
+> console at `/`, OpenAPI docs at `/docs`. One small VPS running the
+> `compose.yaml` in this repo, behind Caddy. The indexed corpus is three
+> public-domain NASA podcast episodes. Uploads are open to anyone, capped
+> at 90 seconds and 10 MB, on a shared key with a daily quota — the caps
+> exist because a visitor waits through the transcription on a CPU.
 
 ---
 
@@ -60,7 +63,7 @@ flowchart LR
     end
 
     PG[("Postgres + pgvector<br/>jobs · transcripts<br/>chunks · summaries")]
-    Groq["Groq<br/>Llama 3.3 70B"]
+    Groq["Groq<br/>openai/gpt-oss-120b"]
 
     Client -->|"audio upload"| T
     T -->|"enqueue job_id"| Redis
@@ -122,7 +125,7 @@ reconstructs the whole journey across processes.
 | **pgvector** | Qdrant, Pinecone, Weaviate | One datastore instead of two. Job state and vectors live in the same database and the same transaction, so they cannot disagree |
 | **all-MiniLM-L6-v2** | all-mpnet-base-v2 | 384 dims, 22MB, fast enough on CPU. Quality is adequate — see [`scripts/search_eval.md`](scripts/search_eval.md) |
 | **RQ** | Celery, Arq | The job model here is "run one function, retry never". Celery's broker abstractions and routing buy nothing at this size |
-| **Groq + Llama 3.3 70B** | GPT-4o-mini | Free tier good enough for a demo, sub-second latency |
+| **Groq, model from config** | GPT-4o-mini | Free tier good enough for a demo, sub-second latency. The model is `SUMMARIZE_MODEL`, not a constant, because hosted providers retire models: this was built against Llama 3.3 70B, which Groq withdrew mid-project. It runs `openai/gpt-oss-120b` today |
 | **Time-based chunking** | fixed character counts | Audio has a time axis; a hit is only useful if it says *when*. ~45s windows with 10s overlap so a thought is not cut in half |
 | **Quota in audio minutes** | requests per hour | A 2-hour upload costs 240x what a 30-second one does. Counting requests would price them identically |
 | **API keys** | JWT / OAuth | There are no user sessions. A hashed key is the right size of solution |
@@ -180,8 +183,9 @@ Known and deliberate:
   caller over quota is rejected, but only after paying the upload.
 - **The audio spool is a shared filesystem.** The API writes the upload
   where the worker reads it. That works under compose via a shared volume;
-  across separate hosts it needs object storage. This currently blocks the
-  split-app Fly deployment — see [`docs/deploy.md`](docs/deploy.md).
+  across separate hosts it needs object storage, which is not implemented.
+  It is the reason the deployment is a single host rather than split
+  API/worker machines — see [`docs/deploy.md`](docs/deploy.md).
 - **English only.** `small.en` is English-specific; a multilingual model
   means changing `WHISPER_MODEL` and re-testing chunk quality.
 - **CPU only.** No GPU path. Transcription is roughly real-time-ish on

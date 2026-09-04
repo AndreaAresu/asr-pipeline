@@ -1,6 +1,6 @@
 """LLM summarization of transcripts into timestamped sections.
 
-Sends a transcript to Groq (Llama 3.3 70B) and gets back a structured
+Sends a transcript to Groq and gets back a structured
 JSON breakdown: 3-5 thematic sections, each with a title, a time range,
 and key points.
 
