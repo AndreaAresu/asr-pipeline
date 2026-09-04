@@ -128,6 +128,12 @@ services:
       DEMO_TRANSCRIPT_GATEWAY: ${DEMO_TRANSCRIPT_GATEWAY:-2db117b7-12b8-4842-8086-75c92507e9f7}
       DEMO_TRANSCRIPT_MICROBIOLOGY: ${DEMO_TRANSCRIPT_MICROBIOLOGY:-3069178a-f847-40fe-9e1c-9fbc5ea4fbf1}
       DEMO_TRANSCRIPT_APOLLO: ${DEMO_TRANSCRIPT_APOLLO:-387b1417-d6a6-4114-8602-28665589cfdb}
+      # The same two values the API enforces, from the same .env, so the
+      # Upload tab can state the limits before a visitor picks a file. Two
+      # copies of one number would be a UI that lies as soon as either
+      # moves; one source, read twice, cannot drift.
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}
+      MAX_AUDIO_SECONDS: ${MAX_AUDIO_SECONDS:-0}
     ports:
       - "127.0.0.1:8501:8501"
     depends_on:

@@ -34,8 +34,17 @@ EXPOSE 8501
 # which would block the container at startup.
 # address 0.0.0.0: bind inside the container so compose can publish it. The
 # port is still bound to 127.0.0.1 on the host — Caddy is the only way in.
-CMD ["streamlit", "run", "app.py", \
-     "--server.address=0.0.0.0", \
-     "--server.port=8501", \
-     "--server.headless=true", \
-     "--browser.gatherUsageStats=false"]
+#
+# maxUploadSize is set from MAX_UPLOAD_MB, the API's own cap, because
+# Streamlit prints its limit inside the file picker ("200MB per file" by
+# default). Left alone it advertises a number the API will reject, directly
+# under the notice stating the real one. The `-gt 0` guard matters: 0 means
+# "no limit" to the API but would mean "reject everything" to Streamlit, so
+# in that case the flag is omitted and Streamlit keeps its own default.
+CMD ["sh", "-c", \
+     "if [ \"${MAX_UPLOAD_MB:-0}\" -gt 0 ]; then set -- --server.maxUploadSize=\"$MAX_UPLOAD_MB\"; fi; \
+      exec streamlit run app.py \
+        --server.address=0.0.0.0 \
+        --server.port=8501 \
+        --server.headless=true \
+        --browser.gatherUsageStats=false \"$@\""]
