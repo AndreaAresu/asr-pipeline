@@ -47,6 +47,24 @@ MAX_AUDIO_SECONDS = int(os.environ.get("MAX_AUDIO_SECONDS", "0"))
 # an upload the API will reject on arrival.
 ACCEPTED_TYPES = ["wav", "mp3", "m4a", "flac", "mp4"]
 
+# Below this cosine similarity a hit is noise, and the demo says so instead
+# of rendering it like any other result. Retrieval always returns the nearest
+# neighbours however far away, so a query the corpus does not cover still
+# comes back with top_k rows — presenting them with the same dignity as good
+# ones is the misleading part, not the ranking.
+#
+# 0.30 is measured, not guessed: on this 109-chunk corpus, 25 hits from five
+# out-of-distribution queries top out at 0.224, while every hit a human would
+# keep sits at 0.372 or above. Nothing lands in between, and 0.30 is the
+# middle of that empty band — as far as the data allows from both ways of
+# being wrong. Widening the out-of-distribution sample pushed the ceiling
+# from 0.188 to 0.224, so the headroom above matters as much as below.
+#
+# It expires with the corpus. On the single-chunk corpus of Run 1 the same
+# kind of query scored *negative*; at 109 chunks it scores 0.10-0.22. Re-run
+# scripts/search_eval.md before trusting this number on a different index.
+MIN_RELEVANT_SCORE = 0.30
+
 # How long to keep polling a job before giving up on the UI side. The job
 # itself is not cancelled — it stays in the queue and finishes — so this
 # only bounds how long the page waits.
@@ -161,6 +179,17 @@ def render_summary(payload: dict) -> None:
         with st.expander(header, expanded=True):
             for point in section["key_points"]:
                 st.markdown(f"- {point}")
+
+
+def render_hit(hit: dict) -> None:
+    """One search result: score and time span beside the passage."""
+    with st.container(border=True):
+        score_col, text_col = st.columns([1, 6])
+        with score_col:
+            st.metric("Score", f"{hit['score']:.3f}")
+            st.caption(f"{fmt_time(hit['start_sec'])}–{fmt_time(hit['end_sec'])}")
+        with text_col:
+            st.write(hit["text"])
 
 
 def describe_limits() -> str:
@@ -318,6 +347,15 @@ with transcribe_tab:
         if own_query:
             # transcript_id scopes the search to this file alone, so hits
             # come from the visitor's own audio and not from the NASA corpus.
+            #
+            # MIN_RELEVANT_SCORE deliberately does not apply here. It was
+            # calibrated on 109 chunks of 45s each; a 35s upload is one chunk
+            # holding everything, and a well-aimed query against it measured
+            # 0.309-0.325 — correct answers that sit on top of the cutoff,
+            # because the passage is diluted rather than irrelevant. A short
+            # file would look broken. The visitor also already knows the
+            # subject: they just uploaded it, so "is anything here relevant"
+            # is not the question this box answers.
             with st.spinner("Searching your transcript…"):
                 payload, error = api_post(
                     "/search",
@@ -359,7 +397,15 @@ with search_tab:
     st.subheader("Semantic search")
     st.write(
         "Matches meaning, not keywords — the query does not have to use the "
-        "words that were actually spoken."
+        "words that were actually spoken. Three NASA podcast episodes are "
+        "indexed, about 67 minutes of audio in 109 passages."
+    )
+    st.caption(
+        f"Scores are cosine similarity. Passages below {MIN_RELEVANT_SCORE:.2f} "
+        "are set aside rather than listed: ranking always returns the nearest "
+        "vectors, so a subject the corpus does not cover would otherwise come "
+        "back looking like an answer. The cutoff is measured on this corpus "
+        "and would move with a different one."
     )
 
     query = st.text_input("Query", placeholder="e.g. what makes intelligence hard to define")
@@ -374,14 +420,43 @@ with search_tab:
         elif not payload["hits"]:
             st.warning("No hits — nothing is indexed on this deployment yet.")
         else:
-            for hit in payload["hits"]:
-                with st.container(border=True):
-                    score_col, text_col = st.columns([1, 6])
-                    with score_col:
-                        st.metric("Score", f"{hit['score']:.3f}")
-                        st.caption(f"{fmt_time(hit['start_sec'])}–{fmt_time(hit['end_sec'])}")
-                    with text_col:
-                        st.write(hit["text"])
+            # The API is left as a pure ranking engine and the cut is made
+            # here, for two reasons: the threshold moves with the corpus, so
+            # it belongs next to the sentence explaining it rather than in an
+            # API parameter callers would hardcode; and a client that wants
+            # the raw ranking can still have it.
+            relevant = [h for h in payload["hits"] if h["score"] >= MIN_RELEVANT_SCORE]
+            weak = [h for h in payload["hits"] if h["score"] < MIN_RELEVANT_SCORE]
+
+            if not relevant:
+                st.warning(
+                    "Nothing in the indexed corpus is a good match for that. "
+                    f"The best passage scored {payload['hits'][0]['score']:.3f}, "
+                    f"below the {MIN_RELEVANT_SCORE:.2f} mark where results stop "
+                    "being about the query and start being merely the closest "
+                    "thing available."
+                )
+            else:
+                for hit in relevant:
+                    render_hit(hit)
+
+            if weak:
+                # Shown on request rather than hidden: that retrieval always
+                # returns the nearest neighbours, however far away, is the
+                # thing worth understanding here — not something to conceal.
+                label = (
+                    "Show the nearest matches anyway"
+                    if not relevant
+                    else f"Show {len(weak)} weaker match{'es' if len(weak) > 1 else ''}"
+                )
+                with st.expander(label):
+                    st.caption(
+                        "Below the cutoff. Ranking never fails — it returns the "
+                        "closest vectors it has, so these are what the corpus "
+                        "offers when it has nothing on the subject."
+                    )
+                    for hit in weak:
+                        render_hit(hit)
 
 with summarize_tab:
     st.subheader("Structured summary")

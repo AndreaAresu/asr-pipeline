@@ -32,6 +32,9 @@ theoretical.** On the single-chunk corpus of Run 1, generic queries landed at
 corpus of Run 2 the same kind of queries scored 0.51-0.62 and 0.10-0.19. More
 candidates means a better best match, for every query class. Read the gap
 between classes, never the absolute number against a band from another run.
+The demo turns that gap into a cutoff — see *Choosing a relevance cutoff* at
+the end, which measures where it actually sits rather than reading it off
+these bands.
 
 With more than one recording indexed there is a second, sharper check that
 does not depend on score at all: **a specific query must retrieve from the
@@ -153,3 +156,57 @@ rank by the full chunk text, not the preview.
   length and never enters the top 3.
 - **Scale.** 109 chunks is a sequential scan. Ranking behaviour under an
   IVFFlat index, which is approximate, is a different experiment.
+
+## Choosing a relevance cutoff — 2026-09-04, same 109-chunk corpus
+
+Run 2 showed out-of-distribution queries scoring 0.10-0.19 while in-domain
+queries scored 0.51-0.68, which invites a threshold. But Run 2 only recorded
+**top-1** per query, and a threshold does not filter queries — it filters
+individual hits. So the top-5 of every query was measured, plus three
+out-of-distribution queries Run 2 did not use.
+
+| Class | Queries | Hits | Score range |
+|---|---|---|---|
+| in-domain (specific + generic) | 8 | 40 | 0.181 – 0.684 |
+| out of distribution | 5 | 25 | 0.077 – 0.224 |
+
+**The pooled ranges overlap, and that is the finding.** One in-domain query —
+*studying viruses and outbreaks in Africa* — runs 0.624, 0.539, 0.372 and then
+falls off a cliff to 0.189, 0.181. The corpus holds about three passages on
+that subject; ranks 4 and 5 are the tail, and they score *below* the best
+out-of-distribution hit (0.224, *best pizza in naples*). A good query has a
+noise tail too.
+
+**But no hit lands between 0.224 and 0.372.** Every out-of-distribution hit is
+under the first number; every hit a human would keep is over the second. The
+band is empty, so the cutoff goes in the middle of it:
+
+    MIN_RELEVANT_SCORE = 0.30
+
+Equidistant from both ways of being wrong: 0.076 above the highest observed
+noise, 0.072 below the weakest hit worth showing. Run 2's suggestion of 0.35
+would have left only 0.022 of margin on the in-domain side.
+
+**Why the margin above matters.** Adding three out-of-distribution queries not
+in Run 2 pushed the ceiling from 0.188 to 0.224. Sample more nonsense and the
+maximum keeps creeping; a cutoff sitting just above the observed maximum is a
+cutoff waiting to be crossed.
+
+**What would move this number.** Corpus size, first: at one chunk (Run 1) these
+queries scored *negative*, at 109 chunks they score 0.10-0.22. Also the
+embedding model, the chunk length, and the domain — a corpus covering more
+subjects makes a stray query likelier to find something genuinely close. Treat
+0.30 as measured on this index, not as a property of cosine similarity.
+
+**Where it is applied.** In `demo/app.py`, not in `/search`. The API stays a
+pure ranking engine: the number expires with the corpus, so it belongs next to
+the sentence explaining it rather than in a parameter a client would hardcode.
+Hits under it are put behind a "show the nearest matches anyway" expander
+rather than dropped, because *retrieval always returns the nearest neighbours*
+is the thing worth understanding, not the thing to hide.
+
+The cutoff is **not** applied to searching one's own uploaded transcript. It
+was calibrated against 45s chunks in a 109-chunk index; a 35s upload is a
+single chunk holding everything, and well-aimed queries against one measured
+0.309-0.325 — right on top of the cutoff, because the passage is diluted
+rather than irrelevant. A short upload would look broken.
