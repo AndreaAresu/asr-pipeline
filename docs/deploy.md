@@ -48,7 +48,7 @@ is for Caddy and systemd.
 
 | What | Where |
 |---|---|
-| Repo | `/opt/asr-pipeline`, branch `interview-ready` |
+| Repo | `/opt/asr-pipeline`, branch `main` |
 | Production config | `/opt/asr-pipeline/.env`, not in git, never committed |
 | Demo API key | `/opt/asr-pipeline/.demo-key`, quota 15 audio-minutes / 24h |
 | Caddy | `/etc/caddy/Caddyfile`, a copy of `deploy/Caddyfile` |
