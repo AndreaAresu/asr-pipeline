@@ -21,11 +21,18 @@ from app.core.logging import logger
 from app.core.rate_limit import enforce_quota, probe_duration
 from app.db.models import ApiKey, Job
 from app.db.session import SessionLocal
-from app.workers.transcribe_worker import transcribe_job
 
 router = APIRouter()
 _redis = Redis.from_url(settings.redis_url)
 _queue = Queue("transcribe", connection=_redis)
+
+# The job is named by string rather than imported, so that enqueuing work does
+# not drag the worker's module, and behind it faster-whisper and ctranslate2,
+# into a process that never transcribes anything. RQ stores the same
+# "module.function" string either way and resolves it in the worker, so the
+# queue payload is unchanged; what changes is what the API has to load to
+# produce it.
+TRANSCRIBE_JOB = "app.workers.transcribe_worker.transcribe_job"
 
 # Whisper on CPU runs at roughly 0.5-1x real time, so transcription time is
 # proportional to the recording, not constant. A fixed timeout is therefore
@@ -185,7 +192,7 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
     request_id = structlog.contextvars.get_contextvars().get("request_id")
     timeout = job_timeout_for(duration)
     _queue.enqueue(
-        transcribe_job, job_id,
+        TRANSCRIBE_JOB, job_id,
         file_path=tmp_path, request_id=request_id, job_timeout=timeout,
     )
     logger.info(

@@ -6,9 +6,12 @@ Redis or a model lives in `scripts/smoke_test.sh`, which runs the real
 stack, faking those here would test the fakes.
 """
 
+import importlib
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.transcribe import TRANSCRIBE_JOB
 from app.main import app
 
 
@@ -36,6 +39,18 @@ def test_every_endpoint_is_registered(client):
         "/search",
         "/summarize/{transcript_id}",
     } <= paths
+
+
+def test_the_enqueued_job_path_resolves_to_a_callable():
+    """The API names the worker task by string instead of importing it.
+
+    That keeps faster-whisper out of the API process, but it also removes
+    the import-time proof that the function exists: a rename would leave
+    every upload failing in the worker instead of failing at startup.
+    This assertion is what stands in for that proof.
+    """
+    module_path, _, attribute = TRANSCRIBE_JOB.rpartition(".")
+    assert callable(getattr(importlib.import_module(module_path), attribute))
 
 
 def test_request_id_is_echoed_back(client):

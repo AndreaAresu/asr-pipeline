@@ -66,6 +66,14 @@ transcription and search work without it, and `/summarize` returns 503.
   (`app/core/asr.py`) and the sentence-transformers model
   (`app/core/embeddings.py`) are lazy module-level singletons. Never
   instantiate them per request.
+- **The API never imports the worker, and `app/core/__init__.py` stays
+  empty.** `app/api/transcribe.py` enqueues by string
+  (`TRANSCRIBE_JOB = "app.workers.transcribe_worker.transcribe_job"`), and the
+  package `__init__` re-exports nothing. Both look like things to tidy up, and
+  either one undone pulls faster-whisper and ctranslate2 back into the API
+  process: importing anything under `app.core` used to cost 2.6s and load
+  torch. `tests/test_app.py` resolves the string and asserts it is callable,
+  which is the import-time check that string reference gives up.
 - **Job ownership is checked before anything else**, including the
   `status != 'done'` check, and a denial is **404, never 403**, with a body
   byte-for-byte identical to a job that does not exist.
