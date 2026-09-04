@@ -14,8 +14,11 @@ header. Interactive docs are at `/docs`.
 | `GET /jobs` | (none) | recent jobs for this key, newest first |
 | `GET /jobs/{id}` | (none) | `{id, status, error_message, duration}` |
 | `GET /jobs/{id}/result` | (none) | `{transcript_id, full_text, language, segments}` |
-| `POST /search` | `{query, top_k, transcript_id?}` | `{query, hits: [{transcript_id, start_sec, end_sec, text, score}]}` |
+| `POST /search` | `{query, top_k, transcript_id?}` | `{query, hits: [{transcript_id, audio_filename, start_sec, end_sec, start, end, text, score, below_threshold}]}` |
 | `POST /summarize/{transcript_id}` | (none) | `{transcript_id, cached, model, sections, meta}` |
+| `GET /transcripts` | (none) | the curated corpus: `[{transcript_id, audio_filename, duration_sec, duration, language, passage_count}]` |
+| `GET /transcripts/{id}/window` | `?start_sec=&end_sec=` | `{transcript_id, audio_filename, start_sec, end_sec, start, end, text}`; `400` past the 300 s cap |
+| `POST /mcp` | JSON-RPC, MCP Streamable HTTP | the three tools, see [the README](../README.md#ask-a-model-instead-of-a-search-box) |
 | `GET /health` | (none) | `{status: "ok"}` |
 | `GET /metrics` | (none) | Prometheus text format |
 
@@ -37,6 +40,22 @@ through a `400`.
 whole index and summarize any `transcript_id`. That is deliberate, and it is
 what lets a visitor query a demo corpus their own key owns none of, but it is
 a property to know before pointing a second tenant at this.
+`GET /transcripts/{id}/window` follows the same rule, since its job is to
+widen a search hit into a quotation.
+
+`GET /transcripts` is the one read that is filtered, and not by key: it lists
+the **curated corpus**, the jobs carrying the `seed` marker that
+`scripts/dump_seed.sh` writes. The asymmetry against `/search` is the point.
+An unrelated upload appears in a *search* only when it is semantically
+relevant to the query; in a *listing* it appears always, because listing is
+indiscriminate by definition. With public upload open on the demo, "what is
+in this corpus?" would otherwise read a stranger's filename aloud.
+
+This is an expedient and not a visibility model. The schema has exactly one
+ownership column, `Job.api_key_hash`, and no notion of who may *see*;
+filtering by a real key would hide the demo corpus from everyone, because it
+belongs to no key. Modelling that properly is open work, and it is what the
+absent `scope` parameter on the MCP tools is waiting for.
 
 ## Stack and trade-offs
 
