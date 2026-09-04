@@ -129,6 +129,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    mcp_allowed_hosts: str = Field(
+        default="",
+        description=(
+            "Comma-separated Host header values accepted on /mcp; empty disables the check. "
+            "The MCP SDK arms an anti DNS-rebinding allowlist of localhost by default, and a "
+            "reverse proxy that passes the public Host through (Caddy does) would then get 421 "
+            "on every request while every local test still passed. Set it to the public hostname "
+            "on a deployment, e.g. api.example.com."
+        ),
+    )
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

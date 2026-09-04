@@ -18,9 +18,39 @@ each front end turns that into whatever its protocol calls an error.
 """
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.db.models import Chunk
+from app.db.models import Chunk, Job, Transcript
+
+# The marker that identifies the curated corpus: the three NASA episodes
+# restored from `data/seed/nasa_corpus.sql`, whose jobs carry this literal
+# instead of the SHA-256 of a key.
+#
+# **This is an expedient, not a visibility model.** The literal exists
+# because publishing a real key's hash in a public repo would be a leak
+# (`scripts/dump_seed.sh` rewrites the column), and it happens to behave
+# like a "part of the demo corpus" flag because it matches no real key.
+# The schema has exactly one ownership column, `Job.api_key_hash`, and the
+# domain does not distinguish *who uploaded* from *who may see*. Filtering
+# by a real key instead would hide the demo corpus from everyone, since it
+# belongs to nobody. The real question - an `is_public` flag? a corpus
+# entity? - is open, and is written down under "Not yet specified" in
+# `.scratch/mcp-server/map.md`. Do not build on this as if it were the
+# answer.
+CURATED_CORPUS_MARKER = "seed"
+
+
+def mmss(seconds: float | None) -> str | None:
+    """Render seconds as `mm:ss`, or None for a missing duration.
+
+    Timestamps exist here for humans and models to quote. Minutes are not
+    wrapped into hours: "24:21" stays "24:21", because a reader scrubbing
+    an audio player is looking for exactly that.
+    """
+    if seconds is None:
+        return None
+    whole = int(seconds)
+    return f"{whole // 60}:{whole % 60:02d}"
 
 
 class SearchHit(BaseModel):
@@ -84,4 +114,61 @@ def search_chunks(
             score=1.0 - distance,
         )
         for chunk, distance in rows
+    ]
+
+
+class TranscriptSummary(BaseModel):
+    """One transcript in the curated corpus, as an index entry."""
+
+    transcript_id: str = Field(description="Pass this to a search filter or to a transcript window.")
+    audio_filename: str = Field(description="Source recording, e.g. 'nasa-apollo11.mp3'.")
+    duration_sec: float | None = Field(description="Length of the recording in seconds; null if it was never measured.")
+    duration: str | None = Field(description="The same length as mm:ss, for quoting.")
+    language: str | None = Field(description="Language detected by Whisper, as an ISO 639-1 code.")
+    passage_count: int = Field(description="Number of indexed passages this transcript was split into.")
+
+
+def list_curated_transcripts(db) -> list[TranscriptSummary]:
+    """List the curated corpus: what a reader can expect to find here.
+
+    Restricted to `CURATED_CORPUS_MARKER`, unlike `search_chunks`, which
+    covers the whole index. The asymmetry is the point: an unrelated
+    upload surfaces in a *search* only when it is semantically relevant,
+    but it surfaces in a *listing* always, because listing is
+    indiscriminate by definition. With public upload open on the demo,
+    that would make a stranger's filename the first thing this project
+    says about itself.
+
+    Args:
+        db: Open session. Not opened or closed here.
+
+    Returns:
+        One entry per transcript, ordered by filename so the listing is
+        stable between calls.
+    """
+    statement = (
+        select(
+            Transcript.id,
+            Job.audio_filename,
+            Job.duration,
+            Transcript.language,
+            func.count(Chunk.id),
+        )
+        .join(Job, Transcript.job_id == Job.id)
+        .outerjoin(Chunk, Chunk.transcript_id == Transcript.id)
+        .where(Job.api_key_hash == CURATED_CORPUS_MARKER)
+        .group_by(Transcript.id, Job.audio_filename, Job.duration, Transcript.language)
+        .order_by(Job.audio_filename)
+    )
+
+    return [
+        TranscriptSummary(
+            transcript_id=transcript_id,
+            audio_filename=audio_filename,
+            duration_sec=duration,
+            duration=mmss(duration),
+            language=language,
+            passage_count=passage_count,
+        )
+        for transcript_id, audio_filename, duration, language, passage_count in db.execute(statement).all()
     ]

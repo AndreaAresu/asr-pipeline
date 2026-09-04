@@ -8,7 +8,7 @@ matter live (the curated-corpus filter, the limit). What actually comes back
 from pgvector belongs to `scripts/smoke_test.sh`.
 """
 
-from app.core.retrieval import search_chunks
+from app.core.retrieval import CURATED_CORPUS_MARKER, list_curated_transcripts, search_chunks
 from app.db.models import Chunk
 
 
@@ -101,3 +101,49 @@ def test_without_a_filter_the_search_covers_the_whole_index():
     search_chunks(db, EMBEDDING, top_k=5)
 
     assert "WHERE" not in str(db.statement)
+
+
+def test_the_listing_is_restricted_to_the_curated_corpus():
+    """Listing is indiscriminate by definition, so it must be filtered.
+
+    A stranger's upload turns up in a *search* only if it is relevant, but
+    in a *listing* it turns up always. With public upload on, that is the
+    first thing a reviewer would be read back.
+    """
+    db = FakeSession()
+
+    list_curated_transcripts(db)
+
+    sql = str(db.statement.compile(compile_kwargs={"literal_binds": True}))
+    assert f"'{CURATED_CORPUS_MARKER}'" in sql
+
+
+def test_a_listed_transcript_carries_what_a_reader_recognises():
+    db = FakeSession([("transcript-1", "nasa-apollo11.mp3", 1140.5, "en", 34)])
+
+    (entry,) = list_curated_transcripts(db)
+
+    assert entry.transcript_id == "transcript-1"
+    assert entry.audio_filename == "nasa-apollo11.mp3"
+    assert entry.language == "en"
+    assert entry.passage_count == 34
+
+
+def test_a_listed_duration_is_readable_as_well_as_numeric():
+    """A model quoting "1140.5 seconds" is not quoting anything."""
+    db = FakeSession([("transcript-1", "nasa-apollo11.mp3", 1140.5, "en", 34)])
+
+    (entry,) = list_curated_transcripts(db)
+
+    assert entry.duration_sec == 1140.5
+    assert entry.duration == "19:00"
+
+
+def test_a_transcript_with_no_duration_is_still_listable():
+    """`Job.duration` is nullable: ffprobe can fail on a file that transcribes."""
+    db = FakeSession([("transcript-1", "a.mp3", None, None, 3)])
+
+    (entry,) = list_curated_transcripts(db)
+
+    assert entry.duration_sec is None
+    assert entry.duration is None

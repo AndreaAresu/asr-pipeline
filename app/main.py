@@ -1,29 +1,49 @@
 """FastAPI application entrypoint.
 
-Registers the request-context middleware and the four routers, and serves
-the three unauthenticated routes: the browser console at `/`, the
-`/health` liveness probe, and `/metrics`. No model is loaded here, the
-API only enqueues work; transcription happens in the worker process.
+Registers the request-context middleware, the five routers and the MCP
+route, and serves the three unauthenticated routes: the browser console at
+`/`, the `/health` liveness probe, and `/metrics`. No model is loaded
+here, the API only enqueues work; transcription happens in the worker
+process.
 """
 
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from starlette.routing import Route
 
 from app.api.jobs import router as jobs_router
 from app.api.search import router as search_router
 from app.api.summarize import router as summarize_router
 from app.api.transcribe import router as transcribe_router
+from app.api.transcripts import router as transcripts_router
 from app.core.logging import logger, setup_logging
 from app.core.metrics import http_errors_total, http_requests_total, registry
+from app.mcp.asgi import MCP_PATH, ApiKeyGate
+from app.mcp.server import mcp, mcp_asgi_app
 
 setup_logging()
 
-app = FastAPI(title="ASR Pipeline", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Run the MCP session manager for as long as the app is up.
+
+    `streamable_http_app()` wires this into the lifespan of the Starlette
+    it returns, but that app is never started by anything: the route below
+    only borrows it as an endpoint. Without this the route answers, then
+    the first MCP message dies on "Task group is not initialized".
+    """
+    async with mcp.session_manager.run():
+        yield
+
+
+app = FastAPI(title="ASR Pipeline", version="0.1.0", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -64,6 +84,18 @@ app.include_router(jobs_router)
 app.include_router(transcribe_router)
 app.include_router(search_router)
 app.include_router(summarize_router)
+app.include_router(transcripts_router)
+
+# An exact Starlette route, deliberately not `app.mount()`: mounting on
+# "/mcp" answers 307 to "/mcp/", which a client that does not follow
+# redirects on POST never recovers from, and mounting on "/" turns every
+# 404 in the API from JSON into text/plain. Both were measured; see
+# `.scratch/mcp-server/research/02-libreria-e-montaggio.md`.
+# GET and DELETE are inert under stateless HTTP but are declared so a
+# client that tries them reads an MCP error rather than a bare 405.
+app.router.routes.append(
+    Route(MCP_PATH, endpoint=ApiKeyGate(mcp_asgi_app), methods=["GET", "POST", "DELETE"])
+)
 
 
 UI_FILE = Path(__file__).parent / "web" / "index.html"
