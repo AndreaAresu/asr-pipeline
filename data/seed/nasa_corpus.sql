@@ -4,6 +4,10 @@
 -- against — one transcription pass serving both, so the published evaluation
 -- describes exactly what a reader can query.
 --
+-- Regenerate with scripts/dump_seed.sh; do not hand-edit, and do not replace
+-- it with a plain pg_dump, which has no way to leave the dev database's other
+-- rows behind.
+--
 --   docker compose exec -T postgres psql -U "$POSTGRES_USER" \
 --     -d "$POSTGRES_DB" < data/seed/nasa_corpus.sql
 --

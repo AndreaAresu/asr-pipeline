@@ -83,6 +83,9 @@ answer 404 through the proxy.
    then put it in `.env` as `DEMO_API_KEY` and `docker compose up -d demo`.
 6. Restore the corpus, after the API has applied its migrations:
    `docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < data/seed/nasa_corpus.sql`
+   It refuses to apply twice. The file is generated — `scripts/dump_seed.sh`
+   on the development machine, never a plain `pg_dump`, which cannot leave
+   that database's other rows behind.
 7. `sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`.
    Both hostnames are `<ip-with-dashes>.sslip.io`, which resolves to the
    address encoded in it — a real public DNS name with no domain to buy, and
