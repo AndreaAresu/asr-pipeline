@@ -94,6 +94,48 @@ HITS=$(jq -n '{query: "what is being discussed", top_k: 3}' \
 [[ "$HITS" -gt 0 ]] || fail "search returned no hits, chunks were not indexed"
 pass "search returned $HITS hit(s)"
 
+step "reading a transcript window"
+WINDOW=$(curl -fsS "$API_URL/transcripts/$TRANSCRIPT_ID/window?start_sec=0&end_sec=30" -H "X-API-Key: $KEY")
+CHARS=$(echo "$WINDOW" | jq -r '.text | length')
+[[ "$CHARS" -gt 0 ]] || fail "the first 30s of the transcript came back empty"
+pass "window 0-30s returned $CHARS characters"
+
+# Over the cap it must refuse and say so, rather than trim in silence.
+code=$(curl -s -o /dev/null -w '%{http_code}' \
+  "$API_URL/transcripts/$TRANSCRIPT_ID/window?start_sec=0&end_sec=100000" -H "X-API-Key: $KEY")
+[[ "$code" == "400" ]] || fail "an oversized window returned $code, expected 400"
+pass "an oversized window is refused"
+
+step "listing the curated corpus"
+# Only jobs marked as the curated corpus are listed, so on a stack that has
+# not restored data/seed/nasa_corpus.sql this is legitimately empty: what is
+# under test here is that the endpoint answers with a list at all.
+LISTED=$(curl -fsS "$API_URL/transcripts" -H "X-API-Key: $KEY" | jq 'length')
+pass "listing returned $LISTED curated transcript(s)"
+
+step "calling the MCP endpoint"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{}')
+[[ "$code" == "401" ]] || fail "/mcp without a key returned $code, expected 401"
+pass "/mcp refuses an unauthenticated caller"
+
+# One self-contained POST: the protocol envelope goes in params._meta.
+TOOLS=$(curl -fsS -X POST "$API_URL/mcp" \
+  -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' \
+  | sed -n 's/^data: //p' | jq '.result.tools | length')
+[[ "$TOOLS" == "3" ]] || fail "/mcp advertised $TOOLS tools, expected 3"
+pass "/mcp advertised $TOOLS tools"
+
+MCP_HITS=$(curl -fsS -X POST "$API_URL/mcp" \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"search_transcripts","arguments":{"query":"what is being discussed","top_k":3}}}' \
+  | sed -n 's/^data: //p' | jq '.result.structuredContent.result | length')
+[[ "$MCP_HITS" -gt 0 ]] || fail "search_transcripts returned no hits over MCP"
+pass "search_transcripts returned $MCP_HITS hit(s) over MCP, authenticated with a Bearer token"
+
 step "summarizing"
 code=$(curl -s -o /tmp/asr_smoke_summary.json -w '%{http_code}' \
   -X POST "$API_URL/summarize/$TRANSCRIPT_ID" -H "X-API-Key: $KEY")

@@ -38,6 +38,12 @@ from app.db.models import Chunk, Job, Transcript
 # entity? - is open, and is written down under "Not yet specified" in
 # `.scratch/mcp-server/map.md`. Do not build on this as if it were the
 # answer.
+#
+# Practical consequence, worth knowing before wondering why a listing is
+# empty: only a database restored from the seed dump has rows carrying this
+# literal. A development stack that transcribed the same episodes itself has
+# them under a real key hash, so `list_curated_transcripts` returns nothing
+# there while `search_chunks` still finds every one of them.
 CURATED_CORPUS_MARKER = "seed"
 
 # Below this cosine similarity a hit is noise. Measured, not guessed, on the
