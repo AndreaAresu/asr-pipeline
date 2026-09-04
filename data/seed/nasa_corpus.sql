@@ -1,7 +1,7 @@
 -- Demo corpus: three public-domain NASA podcast episodes, transcribed with
 -- small.en and indexed as 109 chunks. This is the data the public demo
 -- searches and summarizes, and the data scripts/search_eval.md reports Run 2
--- against — one transcription pass serving both, so the published evaluation
+-- against, one transcription pass serving both, so the published evaluation
 -- describes exactly what a reader can query.
 --
 -- Regenerate with scripts/dump_seed.sh; do not hand-edit, and do not replace

@@ -33,8 +33,7 @@ bash scripts/search_eval.sh               # retrieval quality on a query set
 The API and the worker are **two separate processes**: an upload sits in
 `queued` forever unless the worker (`app/workers/run.py`) subscribed to the
 `transcribe` queue is running. Under compose the API listens on **8080**; run
-directly on the host it listens on **8000**. `main.py` at the repo root is an
-unused stub, and the real entrypoint is `app/main.py`.
+directly on the host it listens on **8000**. The entrypoint is `app/main.py`.
 
 ## Environment
 

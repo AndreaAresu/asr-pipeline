@@ -90,7 +90,7 @@ carries two dated runs against a fixed 10-query set, graded by hand: five
 queries name entities the audio contains, three name broad themes it covers
 without saying so, and two are about subjects it has never heard of.
 
-Run 2, over the 109 chunks the live demo searches:
+Run 2, over the 109 chunks of the seeded corpus:
 
 | | |
 |---|---|
