@@ -232,11 +232,16 @@ rules).
 
 ## Deployment
 
-Fly.io configs for the API (`fly.api.toml`) and worker
-(`fly.worker.toml`) are in the repo, along with a runbook in
-[`docs/deploy.md`](docs/deploy.md). Read the runbook first: the shared
-audio spool noted above has to be resolved before the two-app split will
-work.
+One VPS running this repo's `compose.yaml`, with Caddy on the host
+terminating TLS in front of it — API and browser console on one hostname,
+the Streamlit demo on another, both on `sslip.io` so no domain is needed.
+The runbook, including why the API and worker are *not* on separate
+machines, is in [`docs/deploy.md`](docs/deploy.md).
+
+`fly.api.toml` and `fly.worker.toml` are still in the repo. They describe
+the two-app deployment this started as, which the shared audio spool noted
+above makes unworkable without object storage; they are a record of that
+design rather than a second way to deploy.
 
 ## Related work
 
