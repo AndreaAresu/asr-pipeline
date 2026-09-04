@@ -20,8 +20,6 @@ from sentence_transformers import SentenceTransformer
 
 from app.config import settings
 
-EMBEDDING_DIM = 384
-
 _model: SentenceTransformer | None = None
 
 
@@ -50,8 +48,8 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
             without touching the model.
 
     Returns:
-        One `EMBEDDING_DIM`-length vector per input text, in the same
-        order, each with unit norm.
+        One 384-dimensional vector per input text, in the same order,
+        each with unit norm.
     """
     if not texts:
         return []

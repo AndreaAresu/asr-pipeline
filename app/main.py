@@ -1,8 +1,9 @@
 """FastAPI application entrypoint.
 
-Wires the ASR model lifecycle to the application lifespan, registers
-the transcription and jobs routers, and exposes a `/health` liveness
-probe.
+Registers the request-context middleware and the four routers, and serves
+the three unauthenticated routes: the browser console at `/`, the
+`/health` liveness probe, and `/metrics`. No model is loaded here, the
+API only enqueues work; transcription happens in the worker process.
 """
 
 import uuid

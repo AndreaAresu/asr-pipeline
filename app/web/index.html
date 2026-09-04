@@ -71,7 +71,6 @@
   }
   button:hover:not(:disabled) { filter: brightness(1.08); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
-  button.ghost { background: transparent; color: var(--accent); border-color: var(--border); }
 
   /* upload */
   #drop {
@@ -122,7 +121,6 @@
   .msg { padding: 10px 13px; border-radius: 7px; font-size: 13.5px; margin-top: 12px; }
   .msg.err { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
   .msg.ok  { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
-  .hidden { display: none; }
 </style>
 </head>
 <body>
@@ -337,8 +335,9 @@
     if (transcripts.some((j) => j.transcript_id === previous)) sel.value = previous;
   }
 
-  // Poll while anything is unfinished, then fall back to a slow refresh so
-  // a job started in another tab still shows up without hammering the API.
+  // A steady refresh rather than a poll tied to a single job: it keeps
+  // running jobs current and also surfaces one started in another tab,
+  // at a rate that costs the API one cheap indexed query.
   setInterval(loadJobs, 4000);
 
   // --- search ------------------------------------------------------------

@@ -84,8 +84,8 @@ EPISODES = {
 st.set_page_config(page_title="ASR Pipeline Demo", layout="wide", page_icon="🎙️")
 
 
-def api_post(path: str, **kwargs) -> tuple[dict | None, str | None]:
-    """POST to the API, returning `(payload, error_message)`.
+def _call(method: str, path: str, **kwargs) -> tuple[dict | None, str | None]:
+    """Call the API, returning `(payload, error_message)`.
 
     Network and HTTP failures are turned into a message for the UI rather
     than an exception, so a cold backend or an exhausted quota shows up as
@@ -94,7 +94,8 @@ def api_post(path: str, **kwargs) -> tuple[dict | None, str | None]:
     if not API_KEY:
         return None, "ASR_API_KEY is not configured for this demo."
     try:
-        response = requests.post(
+        response = requests.request(
+            method,
             f"{API_URL}{path}",
             headers={"X-API-Key": API_KEY},
             timeout=TIMEOUT,
@@ -104,26 +105,16 @@ def api_post(path: str, **kwargs) -> tuple[dict | None, str | None]:
         return None, f"Could not reach the API: {e}"
 
     return _interpret(response)
+
+
+def api_post(path: str, **kwargs) -> tuple[dict | None, str | None]:
+    """POST to the API: upload, search, summarize."""
+    return _call("POST", path, **kwargs)
 
 
 def api_get(path: str, **kwargs) -> tuple[dict | None, str | None]:
-    """GET from the API, with the same error handling as `api_post`.
-
-    Exists for job polling, which is the one read the demo does.
-    """
-    if not API_KEY:
-        return None, "ASR_API_KEY is not configured for this demo."
-    try:
-        response = requests.get(
-            f"{API_URL}{path}",
-            headers={"X-API-Key": API_KEY},
-            timeout=TIMEOUT,
-            **kwargs,
-        )
-    except requests.RequestException as e:
-        return None, f"Could not reach the API: {e}"
-
-    return _interpret(response)
+    """GET from the API, for job polling, the one read the demo does."""
+    return _call("GET", path, **kwargs)
 
 
 def _interpret(response: requests.Response) -> tuple[dict | None, str | None]:
