@@ -8,6 +8,10 @@
 # because a single run of a queue-backed system tells you very little: the
 # first call pays for model loading, and the worker's queue wait varies.
 #
+# Needs `jq` and `python3` on the machine you run this from — not on the
+# server. Neither is in the API image, so on a fresh VPS `jq` is one
+# `apt-get install` away and the script dies on the first row without it.
+#
 # Env:
 #   ASR_API_URL  API base URL (default http://localhost:8080)
 #   ASR_API_KEY  required
@@ -59,15 +63,22 @@ printf "|%s|%s|%s|%s|\n" "------------------------------------" "----------" "--
 LAST_TRANSCRIPT=""
 for audio in "${AUDIO_FILES[@]}"; do
   [[ -f "$audio" ]] || { echo "missing: $audio" >&2; continue; }
-  seconds=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$audio" 2>/dev/null || echo 0)
+  # The label's duration comes from the API, not from a local ffprobe. The
+  # benchmark is normally run against a deployment from a machine that is
+  # not the deployment, and ffprobe lives inside the image rather than on
+  # the host — so probing locally silently produced 0, and every row came
+  # out labelled "0s audio". /jobs/{id} reports the duration the service
+  # actually measured, which is the honest number for the label anyway.
+  seconds=0
   samples=""
 
   for _ in $(seq 1 "$REPEATS"); do
     start=$(now)
     job=$(curl -fsS -X POST "$API_URL/transcribe" -H "X-API-Key: $ASR_API_KEY" -F "audio=@$audio" | jq -r .job_id)
     while true; do
-      status=$(curl -fsS "$API_URL/jobs/$job" -H "X-API-Key: $ASR_API_KEY" | jq -r .status)
-      [[ "$status" == "done" ]] && break
+      state=$(curl -fsS "$API_URL/jobs/$job" -H "X-API-Key: $ASR_API_KEY")
+      status=$(jq -r .status <<<"$state")
+      [[ "$status" == "done" ]] && { seconds=$(jq -r '.duration // 0' <<<"$state"); break; }
       [[ "$status" == "failed" ]] && { echo "job failed for $audio" >&2; exit 1; }
       sleep 1
     done

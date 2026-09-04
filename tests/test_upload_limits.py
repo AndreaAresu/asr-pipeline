@@ -71,6 +71,23 @@ def test_a_recording_at_the_duration_cap_is_accepted(monkeypatch):
     _enforce_duration_limit(90.0)
 
 
+def test_a_barely_over_recording_says_so_instead_of_contradicting_itself(monkeypatch):
+    """The check is `>`, so a file can lose by hundredths of a second.
+
+    `ffmpeg -t 90 -c copy` produces 90.05s, and the message rounded that to
+    the nearest second: "audio is 90s long; the limit is 90s" — which reads
+    as the service being broken rather than the file being over. Measured on
+    the deployed VPS, by cutting a clip at exactly the cap.
+    """
+    monkeypatch.setattr(settings, "max_audio_seconds", 90)
+    with pytest.raises(HTTPException) as exc:
+        _enforce_duration_limit(90.05)
+    assert exc.value.status_code == 413
+    assert "90.05s" in exc.value.detail
+    # The two numbers in the message must not read as equal.
+    assert "is 90s long; the limit is 90s" not in exc.value.detail
+
+
 def test_the_duration_cap_is_disabled_at_zero(monkeypatch):
     monkeypatch.setattr(settings, "max_audio_seconds", 0)
     _enforce_duration_limit(7200.0)

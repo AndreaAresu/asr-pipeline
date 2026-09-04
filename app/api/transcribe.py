@@ -92,8 +92,13 @@ def _enforce_duration_limit(duration: float) -> None:
     """
     limit = settings.max_audio_seconds
     if limit and duration > limit:
+        # Two decimals, not zero: the check is `>`, so a recording can be
+        # over the limit by hundredths of a second — `ffmpeg -t 90 -c copy`
+        # yields 90.05s, which rounded to the nearest second told the caller
+        # "audio is 90s long; the limit is 90s" and read as a bug in the
+        # service rather than a boundary in their file.
         raise HTTPException(
-            413, f"audio is {duration:.0f}s long; the limit is {limit}s"
+            413, f"audio is {duration:.2f}s long; the limit is {limit}s"
         )
 
 
