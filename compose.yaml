@@ -107,6 +107,42 @@ services:
       api:
         condition: service_started
 
+  demo:
+    # Its own image and its own build context: ./demo, so the root
+    # .dockerignore (which excludes demo/) never applies. See demo/Dockerfile.
+    build: ./demo
+    restart: unless-stopped
+    environment:
+      # The service name on the compose network, not the public hostname.
+      # The demo's traffic to the API never leaves the machine, so the demo
+      # key is not sent over the internet and does not need the proxy up to
+      # work. Inside the network each container's localhost is itself.
+      ASR_API_URL: http://api:8080
+      # The demo key, with its low daily quota. Server-side only: Streamlit
+      # renders on the server, so the browser never sees this value and the
+      # public API is not callable directly by a visitor.
+      ASR_API_KEY: ${DEMO_API_KEY:-}
+      # Transcript ids from data/seed/nasa_corpus.sql. Defaulted rather than
+      # required: any deployment that restores that seed has exactly these
+      # rows, so the Summarize tab works with no extra configuration.
+      DEMO_TRANSCRIPT_GATEWAY: ${DEMO_TRANSCRIPT_GATEWAY:-2db117b7-12b8-4842-8086-75c92507e9f7}
+      DEMO_TRANSCRIPT_MICROBIOLOGY: ${DEMO_TRANSCRIPT_MICROBIOLOGY:-3069178a-f847-40fe-9e1c-9fbc5ea4fbf1}
+      DEMO_TRANSCRIPT_APOLLO: ${DEMO_TRANSCRIPT_APOLLO:-387b1417-d6a6-4114-8602-28665589cfdb}
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on:
+      # service_healthy, unlike the worker's dependency on the API: the demo
+      # is nothing but calls to the API, so starting before it is serving
+      # just shows a visitor an error.
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
 volumes:
   pg_data:
   hf_cache:

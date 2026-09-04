@@ -1,15 +1,23 @@
 """Streamlit demo for the ASR pipeline.
 
-A thin client over the public API: it holds no logic of its own, just
-calls `/search` and `/summarize` and renders what comes back. Deployed
-separately on Streamlit Community Cloud, which is why it lives outside
-`app/` and has its own requirements.txt — the API image should not carry
-Streamlit.
+A thin client over the API: it holds no logic of its own, just calls
+`/search` and `/summarize` and renders what comes back. It lives outside
+`app/` and has its own requirements.txt and Dockerfile because the two
+images should stay apart — the API image carries torch, this one must not,
+and this one carries Streamlit, which the worker must not.
 
-Configuration comes from the environment (Streamlit Cloud calls these
-"secrets"):
+Runs as the `demo` service in compose, on the same host as the API, not on
+Streamlit Community Cloud: a community-cloud app sleeps when idle and
+greets the first visitor after a quiet period with a "wake this app up"
+button, which is the wrong first impression for a public demo.
 
-    ASR_API_URL   base URL of the API
+Note this is the *second* UI. `app/web/index.html`, served by the API at
+`/`, is the console that needs no extra process; this one is the public
+face and reaches the API over the compose network.
+
+Configuration comes from the environment (compose passes it in):
+
+    ASR_API_URL   base URL of the API — http://api:8080 inside compose
     ASR_API_KEY   a demo key with a deliberately low daily quota
 """
 
@@ -22,12 +30,14 @@ API_URL = os.environ.get("ASR_API_URL", "http://localhost:8080").rstrip("/")
 API_KEY = os.environ.get("ASR_API_KEY", "")
 TIMEOUT = 60
 
-# Transcripts indexed on the demo database. Replace the ids with the ones
-# printed by /jobs/{id}/result after indexing your own episodes.
+# The indexed corpus: three public-domain episodes of NASA's "Houston We
+# Have a Podcast", restored from data/seed/nasa_corpus.sql. Ids come from
+# the environment so a deployment with a different corpus can point these
+# elsewhere without touching the code.
 EPISODES = {
-    "Lex Fridman — AI / ML": os.environ.get("DEMO_TRANSCRIPT_AI", ""),
-    "Lex Fridman — Math / Physics": os.environ.get("DEMO_TRANSCRIPT_SCIENCE", ""),
-    "Lex Fridman — History / Politics": os.environ.get("DEMO_TRANSCRIPT_HISTORY", ""),
+    "NASA — Gateway: Together to the Moon": os.environ.get("DEMO_TRANSCRIPT_GATEWAY", ""),
+    "NASA — Astronaut and Microbiologist": os.environ.get("DEMO_TRANSCRIPT_MICROBIOLOGY", ""),
+    "NASA — Apollo 11 to Now": os.environ.get("DEMO_TRANSCRIPT_APOLLO", ""),
 }
 
 st.set_page_config(page_title="ASR Pipeline Demo", layout="wide", page_icon="🎙️")
@@ -74,8 +84,9 @@ st.markdown(
     "in Postgres with pgvector."
 )
 st.caption(
-    "The backend suspends when idle, so the first request after a quiet "
-    "period can take ~30s to wake it."
+    "Running on a single small VPS, one worker, one queue. Nothing suspends "
+    "between visits, but the first transcription after a restart also pays "
+    "for loading the model, and two visitors at once wait in line."
 )
 
 search_tab, summarize_tab = st.tabs(["Search", "Summarize"])
@@ -111,10 +122,11 @@ with search_tab:
 with summarize_tab:
     st.subheader("Structured summary")
     st.write(
-        "The transcript is sent to Llama 3.3 70B with inline timestamp "
-        "markers, so section times are quoted from the audio rather than "
-        "invented. Results are cached: the first call takes seconds, every "
-        "later one is a database lookup."
+        "The transcript is sent to an LLM with inline timestamp markers, so "
+        "section times are quoted from the audio rather than invented. The "
+        "model that answered is named under each result — the deployment "
+        "picks it, because hosted models get retired. Results are cached: "
+        "the first call takes seconds, every later one is a database lookup."
     )
 
     labelled = {name: tid for name, tid in EPISODES.items() if tid}

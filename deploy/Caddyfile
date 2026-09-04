@@ -27,9 +27,12 @@ api.159-195-250-205.sslip.io {
 	reverse_proxy 127.0.0.1:8080
 }
 
-# The Streamlit demo gets its own hostname once it runs as a compose service.
-# Kept here as a reminder that the second name needs no DNS work either:
+# The Streamlit demo, on a second sslip.io name off the same address — no
+# DNS work and a second certificate Caddy fetches on its own.
 #
-# demo.159-195-250-205.sslip.io {
-# 	reverse_proxy 127.0.0.1:8501
-# }
+# It proxies to 8501, which compose binds to 127.0.0.1 like everything else,
+# so this is the only way to reach the demo. Streamlit talks to the browser
+# over a websocket; reverse_proxy upgrades it without extra configuration.
+demo.159-195-250-205.sslip.io {
+	reverse_proxy 127.0.0.1:8501
+}
