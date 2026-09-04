@@ -120,8 +120,13 @@ class Settings(BaseSettings):
         ),
     )
     summarize_model: str = Field(
-        default="llama-3.3-70b-versatile",
-        description="Groq chat model used to summarize transcripts.",
+        default="openai/gpt-oss-120b",
+        description=(
+            "Groq chat model used to summarize transcripts. Groq retires models without "
+            "warning — llama-3.3-70b-versatile was the default until it started answering "
+            "404 — so treat this as a value that expires. `GET /openai/v1/models` on the "
+            "Groq API lists what is currently servable."
+        ),
     )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

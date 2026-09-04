@@ -55,8 +55,17 @@ services:
       # container's localhost is itself.
       POSTGRES_HOST: postgres
       REDIS_URL: redis://redis:6379/0
+      # This block is the ONLY channel between the host's .env and the
+      # containers: .dockerignore excludes .env, so nothing inside the image
+      # ever reads that file. A setting added to app/config.py and left out
+      # here is silently inert in every deployment — it does not warn, it
+      # just runs on its default. Add new settings in both places.
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      SUMMARIZE_MODEL: ${SUMMARIZE_MODEL:-openai/gpt-oss-120b}
       WHISPER_MODEL: ${WHISPER_MODEL:-small.en}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}
+      MAX_AUDIO_SECONDS: ${MAX_AUDIO_SECONDS:-0}
       TEMP_AUDIO_DIR: /var/spool/asr
     ports:
       - "127.0.0.1:8080:8080"
