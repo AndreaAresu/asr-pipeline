@@ -24,6 +24,11 @@ data/samples/*
 
 # Local agent instructions
 CLAUDE.md
+# Agent state, not project state: settings.local.json plus any git worktrees
+# checked out under it. Untracked rather than ignored, a stray `git add -A`
+# publishes both — and a worktree in here is a second copy of the whole repo,
+# which is worse than noise: an edit can land in it instead of the real tree.
+.claude/
 
 # Personal planning docs
 *.pdf

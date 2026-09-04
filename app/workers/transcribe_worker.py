@@ -212,6 +212,18 @@ def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -
     db = SessionLocal()
     try:
         job = db.get(Job, job_id)
+        if job is None:
+            # The queue and the database can disagree: Redis holds the job,
+            # Postgres holds the row, and nothing ties the two lifetimes
+            # together. A queue that outlives its database — a recreated
+            # volume, a restored dump — hands the worker an id with no row
+            # behind it. There is nothing to transcribe and nothing to mark
+            # failed, so say so and stop; the `finally` still removes the
+            # spooled file. Raising would only turn a stale queue entry into
+            # a traceback. The failure handler below has always guarded this
+            # case; the success path had not.
+            logger.warning("transcribe.orphaned", reason="job row not found")
+            return
         job.status = "processing"
         job.started_at = datetime.now(UTC)
         db.commit()

@@ -59,3 +59,35 @@ def test_the_reason_stays_readable_without_a_signal():
     reason = termination_reason(None)
     assert "signal" not in reason.split("OOM")[0]
     assert reason.startswith("worker process terminated before")
+
+
+def test_a_job_whose_row_is_gone_is_not_a_crash(tmp_path, monkeypatch):
+    """The queue can outlive the database it points into.
+
+    Redis holds the job id, Postgres holds the row, and nothing ties the
+    two lifetimes together — so a recreated volume or a restored dump
+    leaves queued ids with no row behind them. Dereferencing that `None`
+    raised `AttributeError: 'NoneType' object has no attribute 'status'`
+    and turned a stale queue entry into a traceback, while the failure
+    handler a few lines below had guarded the same case all along.
+
+    The spooled file must still be removed: it is the one piece of state
+    an orphaned job leaves on disk.
+    """
+    import app.workers.transcribe_worker as worker
+
+    class _NoRowSession:
+        def get(self, model, ident):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(worker, "SessionLocal", _NoRowSession)
+
+    spooled = tmp_path / "orphan.wav"
+    spooled.write_bytes(b"audio")
+
+    worker.transcribe_job("a-job-id-with-no-row", file_path=str(spooled))
+
+    assert not spooled.exists()
