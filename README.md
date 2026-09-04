@@ -11,9 +11,9 @@ timestamped sections.
 key. Search 67 minutes of indexed NASA podcasts, or upload your own clip and
 watch it go through. Also live: the [API and its browser
 console](https://api.159-195-250-205.sslip.io), with [OpenAPI
-docs](https://api.159-195-250-205.sslip.io/docs), and an
-[**MCP endpoint**](#ask-a-model-instead-of-a-search-box) that hands the same
-retrieval to an assistant as three tools.
+docs](https://api.159-195-250-205.sslip.io/docs). The same retrieval is also
+[**exposed to an assistant over MCP**](#ask-a-model-instead-of-a-search-box),
+as three tools.
 
 ![Semantic search over the indexed corpus](docs/img/search.jpg)
 
@@ -150,8 +150,9 @@ answer with the recording and the timestamp it read.
 }
 ```
 
-> **The demo key is not published here yet.** Until it is, run the stack
-> locally (see [Run it](#run-it)), mint one with
+> **Not live yet, and the demo key is not published here yet.** The endpoint
+> ships with this change; until it is deployed and a key is issued, run the
+> stack locally (see [Run it](#run-it)), mint one with
 > `docker compose exec api python -m scripts.create_api_key mcp-demo 10`, and
 > point the config at `http://localhost:8080/mcp`.
 
@@ -189,8 +190,10 @@ quotable.
 
 ### What it looks like
 
-Real output, from the corpus above. Asked *"was DNA ever sequenced in
-space?"*, a model calls `search_transcripts`:
+**"Was DNA ever sequenced in space?"** The tool output below is real, taken
+from the indexed corpus; the arrangement is the sequence a model follows.
+
+**1. `search_transcripts({"query": "DNA sequencing on the space station"})`**
 
 ```json
 {
@@ -202,12 +205,20 @@ space?"*, a model calls `search_transcripts`:
 }
 ```
 
-then widens it with `fetch_transcript_window` (`8:57`-`11:07`) and can answer
-with the sentence that matters, cited: *"we sequenced a little bit over two
-billion base pairs"*, `nasa-microbiologist.mp3` at 9:41. The filename and the
-`mm:ss` are on the hit itself, because a UUID and a float are not a citation,
-and the recording's name lives two joins away where nothing consuming a hit
-can reach it.
+**2. `fetch_transcript_window({"transcript_id": "...", "start_sec": 541, "end_sec": 666})`**
+returns `8:57`-`11:07` whole, which is where the number lives:
+
+```text
+... And we were able to demonstrate that we could do it ... I think we
+sequenced a little bit over two billion base pairs.
+```
+
+**3. The answer, citable:** yes, aboard the ISS, and over two billion base
+pairs of it, `nasa-microbiologist.mp3` at 9:41.
+
+The filename and the `mm:ss` are on the hit itself, because a UUID and a
+float are not a citation, and the recording's name lives two joins away where
+nothing consuming a hit can reach it.
 
 ### The uncomfortable parts, stated
 

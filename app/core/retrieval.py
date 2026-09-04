@@ -299,7 +299,9 @@ def transcript_window(db, transcript_id: str, start_sec: float, end_sec: float) 
 
     covered = [
         seg
-        for seg in segments
+        # `or []`, as `app/api/summarize.py` does: the column is nullable, and
+        # a transcript written before segments were stored would be a 500.
+        for seg in (segments or [])
         if segment_field(seg, "end") > start_sec and segment_field(seg, "start") < end_sec
     ]
 

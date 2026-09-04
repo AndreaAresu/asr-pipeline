@@ -260,6 +260,10 @@ def _transport_security() -> TransportSecuritySettings:
     """
     allowed = [host.strip() for host in settings.mcp_allowed_hosts.split(",") if host.strip()]
     if not allowed:
+        # Logged rather than silent: turning the check off is right locally and
+        # defensible behind a proxy that routes on Host, but a deployment that
+        # simply forgot the variable should be able to see that it did.
+        logger.info("mcp.host_check_disabled", reason="MCP_ALLOWED_HOSTS is empty")
         return TransportSecuritySettings(enable_dns_rebinding_protection=False)
     return TransportSecuritySettings(
         allowed_hosts=[form for host in allowed for form in (host, f"{host}:*")],

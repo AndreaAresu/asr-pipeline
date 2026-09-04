@@ -26,7 +26,7 @@ router = APIRouter()
 
 @router.get("/transcripts", response_model=list[TranscriptSummary])
 def list_transcripts(api_key: ApiKey = Depends(get_api_key)):
-    """List the curated corpus, newest question first: what is in here?
+    """List the curated corpus: what is in here?
 
     Deliberately **not** the whole index. `/search` ranks everything
     stored, including visitor uploads; this listing shows only the curated

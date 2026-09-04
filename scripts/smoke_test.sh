@@ -110,8 +110,14 @@ step "listing the curated corpus"
 # Only jobs marked as the curated corpus are listed, so on a stack that has
 # not restored data/seed/nasa_corpus.sql this is legitimately empty: what is
 # under test here is that the endpoint answers with a list at all.
-LISTED=$(curl -fsS "$API_URL/transcripts" -H "X-API-Key: $KEY" | jq 'length')
-pass "listing returned $LISTED curated transcript(s)"
+LISTING=$(curl -fsS "$API_URL/transcripts" -H "X-API-Key: $KEY")
+echo "$LISTING" | jq -e 'type == "array"' >/dev/null || fail "/transcripts did not return a list"
+LISTED=$(echo "$LISTING" | jq 'length')
+# The file just uploaded is owned by this run's key, not by the curated
+# marker, so it must NOT appear here: that is the property under test.
+echo "$LISTING" | jq -e --arg id "$TRANSCRIPT_ID" 'map(.transcript_id) | index($id) | not' >/dev/null \
+  || fail "the freshly uploaded transcript appeared in the curated listing"
+pass "listing returned $LISTED curated transcript(s), and not this run's upload"
 
 step "calling the MCP endpoint"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/mcp" \

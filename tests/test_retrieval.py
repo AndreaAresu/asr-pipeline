@@ -298,3 +298,10 @@ def test_an_unknown_transcript_is_a_lookup_failure_not_an_empty_window():
     """An empty window would read as "nothing is said there", which is a lie."""
     with pytest.raises(LookupError):
         transcript_window(FakeSession([]), "no-such-transcript", 0.0, 10.0)
+
+
+def test_a_transcript_stored_without_segments_is_empty_rather_than_a_crash():
+    """`word_timestamps` is nullable, and a 500 is a poor way to learn that."""
+    window = transcript_window(FakeSession([(None, "a.mp3")]), "transcript-1", 0.0, 10.0)
+
+    assert window.text == ""
