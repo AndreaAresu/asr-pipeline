@@ -20,6 +20,7 @@ each front end turns that into whatever its protocol calls an error.
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from app.core.chunking import segment_field
 from app.db.models import Chunk, Job, Transcript
 
 # The marker that identifies the curated corpus: the three NASA episodes
@@ -51,6 +52,14 @@ CURATED_CORPUS_MARKER = "seed"
 # returns it anyway. `demo/app.py` keeps its own copy of the number because
 # it is a separate service that cannot import this package.
 MIN_RELEVANT_SCORE = 0.30
+
+# Widest transcript window that will be served, in seconds. Five minutes is
+# an order of magnitude more than the ~45 seconds a search hit covers, and a
+# fifth of an episode: enough to read around a passage, not enough to pull a
+# whole transcript through repeated calls. It is also comfortably inside the
+# response cap MCP clients impose, which is the other half of the reason -
+# an oversized answer gets cut at a point nobody chose.
+MAX_WINDOW_SEC = 300.0
 
 
 def mmss(seconds: float | None) -> str | None:
@@ -213,3 +222,90 @@ def list_curated_transcripts(db) -> list[TranscriptSummary]:
         )
         for transcript_id, audio_filename, duration, language, passage_count in db.execute(statement).all()
     ]
+
+
+class TranscriptWindow(BaseModel):
+    """The text of one transcript over a time interval."""
+
+    transcript_id: str = Field(description="Transcript the text was read from.")
+    audio_filename: str = Field(description="Source recording, e.g. 'nasa-apollo11.mp3'.")
+    start_sec: float = Field(description="Start of the text actually returned, in seconds.")
+    end_sec: float = Field(description="End of the text actually returned, in seconds.")
+    start: str = Field(description="The same start as mm:ss, for quoting.")
+    end: str = Field(description="The same end as mm:ss, for quoting.")
+    text: str = Field(
+        description=(
+            "What is said over the interval, whole segments only, so the quote does not begin or end "
+            "mid-sentence. Empty when nothing is said there, which usually means the interval is past "
+            "the end of the recording."
+        ),
+    )
+
+
+def transcript_window(db, transcript_id: str, start_sec: float, end_sec: float) -> TranscriptWindow:
+    """Read one transcript over a time interval, for quoting around a hit.
+
+    Built from the stored Whisper segments rather than from chunks:
+    chunks overlap by ten seconds, so stitching them would repeat text.
+    Segments are contiguous, and are returned whole - a window that
+    started mid-sentence would be a worse quote than one a second too
+    wide.
+
+    Reading is not scoped to the caller's key, matching `/search` and
+    `/summarize`: any valid key can read any indexed transcript. Job
+    *status* is key-scoped, transcript *content* is not, which is the
+    existing shape of this system and not something this function decides.
+
+    Args:
+        db: Open session. Not opened or closed here.
+        transcript_id: Which transcript to read.
+        start_sec: Start of the interval, in seconds.
+        end_sec: End of the interval, in seconds.
+
+    Returns:
+        The text over the interval, with the span it actually covers -
+        which can be slightly wider than what was asked for, because
+        segments are returned whole.
+
+    Raises:
+        ValueError: If the interval is empty or inverted, or wider than
+            `MAX_WINDOW_SEC`. Refused rather than truncated: a caller can
+            ask again for less, but cannot notice a silent trim.
+        LookupError: If no such transcript exists. An empty window would
+            read as "nothing is said there", which is a different claim.
+    """
+    if end_sec <= start_sec:
+        raise ValueError(f"end_sec ({end_sec}) must be greater than start_sec ({start_sec})")
+    if end_sec - start_sec > MAX_WINDOW_SEC:
+        raise ValueError(
+            f"window of {end_sec - start_sec:.0f}s is wider than the {MAX_WINDOW_SEC:.0f}s cap; "
+            "ask for a narrower interval"
+        )
+
+    row = db.execute(
+        select(Transcript.word_timestamps, Job.audio_filename)
+        .join(Job, Transcript.job_id == Job.id)
+        .where(Transcript.id == transcript_id)
+    ).first()
+    if row is None:
+        raise LookupError(f"no transcript {transcript_id}")
+    segments, audio_filename = row
+
+    covered = [
+        seg
+        for seg in segments
+        if segment_field(seg, "end") > start_sec and segment_field(seg, "start") < end_sec
+    ]
+
+    covered_start = segment_field(covered[0], "start") if covered else start_sec
+    covered_end = segment_field(covered[-1], "end") if covered else end_sec
+
+    return TranscriptWindow(
+        transcript_id=transcript_id,
+        audio_filename=audio_filename,
+        start_sec=covered_start,
+        end_sec=covered_end,
+        start=mmss(covered_start),
+        end=mmss(covered_end),
+        text=" ".join(segment_field(seg, "text").strip() for seg in covered).strip(),
+    )

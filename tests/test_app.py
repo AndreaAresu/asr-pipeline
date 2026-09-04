@@ -39,6 +39,7 @@ def test_every_endpoint_is_registered(client):
         "/search",
         "/summarize/{transcript_id}",
         "/transcripts",
+        "/transcripts/{transcript_id}/window",
         "/mcp",
     } <= paths
 
@@ -80,6 +81,7 @@ def test_a_request_id_is_minted_when_absent(client):
         ("get", "/jobs/some-id/result", {}),
         # The corpus listing is open to any valid key, but not to none.
         ("get", "/transcripts", {}),
+        ("get", "/transcripts/some-id/window?start_sec=0&end_sec=30", {}),
         # Not a FastAPI route, so `Depends` cannot protect it: the 401 comes
         # from the ASGI gate in front of it instead.
         ("post", "/mcp", {"json": {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}}),

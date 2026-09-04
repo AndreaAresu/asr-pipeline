@@ -12,9 +12,11 @@ import pytest
 
 from app.core.retrieval import (
     CURATED_CORPUS_MARKER,
+    MAX_WINDOW_SEC,
     MIN_RELEVANT_SCORE,
     list_curated_transcripts,
     search_chunks,
+    transcript_window,
 )
 from app.db.models import Chunk
 
@@ -27,6 +29,9 @@ class FakeResult:
 
     def all(self):
         return self._rows
+
+    def first(self):
+        return self._rows[0] if self._rows else None
 
 
 class FakeSession:
@@ -211,3 +216,85 @@ def test_the_threshold_is_a_boundary_not_a_gap():
 
     assert hit.score == pytest.approx(MIN_RELEVANT_SCORE)
     assert hit.below_threshold is False
+
+
+def segment(start: float, end: float, text: str) -> dict:
+    """A row of `Transcript.word_timestamps`, as the worker writes it."""
+    return {"start": start, "end": end, "text": text, "words": []}
+
+
+SEGMENTS = [
+    segment(0.0, 10.0, "Good morning."),
+    segment(10.0, 20.0, "Today we talk about the lunar lander."),
+    segment(20.0, 30.0, "It launched in July."),
+    segment(30.0, 40.0, "And that is all."),
+]
+
+
+def a_transcript(segments=None, filename="nasa-apollo11.mp3"):
+    return FakeSession([(segments if segments is not None else SEGMENTS, filename)])
+
+
+def test_a_window_returns_the_text_over_the_interval():
+    window = transcript_window(a_transcript(), "transcript-1", 10.0, 30.0)
+
+    assert window.text == "Today we talk about the lunar lander. It launched in July."
+
+
+def test_a_window_carries_what_a_citation_needs():
+    window = transcript_window(a_transcript(), "transcript-1", 10.0, 30.0)
+
+    assert window.transcript_id == "transcript-1"
+    assert window.audio_filename == "nasa-apollo11.mp3"
+    assert (window.start, window.end) == ("0:10", "0:30")
+
+
+def test_a_segment_straddling_the_edge_is_included_whole():
+    """Segments are not cut: half a sentence is worse than a second too much."""
+    window = transcript_window(a_transcript(), "transcript-1", 15.0, 25.0)
+
+    assert window.text == "Today we talk about the lunar lander. It launched in July."
+    assert (window.start_sec, window.end_sec) == (10.0, 30.0)
+
+
+def test_the_covered_span_is_reported_not_the_requested_one():
+    window = transcript_window(a_transcript(), "transcript-1", 15.0, 25.0)
+
+    assert (window.start_sec, window.end_sec) == (10.0, 30.0)
+
+
+def test_an_interval_past_the_end_of_the_recording_comes_back_empty():
+    """Empty, not an error: "nothing is said there" is a real answer."""
+    window = transcript_window(a_transcript(), "transcript-1", 300.0, 400.0)
+
+    assert window.text == ""
+    assert (window.start_sec, window.end_sec) == (300.0, 400.0)
+
+
+def test_a_window_wider_than_the_cap_is_refused_and_says_so():
+    """It must not answer with a quietly truncated window.
+
+    Without a cap this is a way to pull a whole transcript through one
+    tool call, and an oversized response would be cut by the client
+    anyway - at a point nobody chose, with nothing said about it.
+    """
+    with pytest.raises(ValueError) as refusal:
+        transcript_window(a_transcript(), "transcript-1", 0.0, MAX_WINDOW_SEC + 1)
+
+    assert f"{MAX_WINDOW_SEC:.0f}s cap" in str(refusal.value)
+
+
+def test_a_window_exactly_at_the_cap_is_allowed():
+    """The cap is a maximum, not a threshold to stay under."""
+    assert transcript_window(a_transcript(), "transcript-1", 0.0, MAX_WINDOW_SEC) is not None
+
+
+def test_an_interval_that_ends_before_it_starts_is_refused():
+    with pytest.raises(ValueError):
+        transcript_window(a_transcript(), "transcript-1", 30.0, 10.0)
+
+
+def test_an_unknown_transcript_is_a_lookup_failure_not_an_empty_window():
+    """An empty window would read as "nothing is said there", which is a lie."""
+    with pytest.raises(LookupError):
+        transcript_window(FakeSession([]), "no-such-transcript", 0.0, 10.0)

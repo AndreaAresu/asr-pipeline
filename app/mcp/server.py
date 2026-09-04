@@ -36,11 +36,14 @@ from app.core.auth import credential_from_headers, resolve_api_key
 from app.core.embeddings import embed_batch
 from app.core.logging import logger
 from app.core.retrieval import (
+    MAX_WINDOW_SEC,
     MIN_RELEVANT_SCORE,
     SearchHit,
     TranscriptSummary,
+    TranscriptWindow,
     list_curated_transcripts,
     search_chunks,
+    transcript_window,
 )
 from app.db.models import ApiKey
 from app.db.session import SessionLocal
@@ -183,6 +186,66 @@ def _search_transcripts(
         top_score=round(hits[0].score, 4) if hits else None,
     )
     return hits
+
+
+WINDOW_DESCRIPTION = (
+    "Read what a transcript says over a time interval, to quote a whole sentence instead of a passage "
+    "cut off at both ends. This is the follow-up to search_transcripts: take a hit's start_sec and "
+    "end_sec, widen them by a minute or so either side, and read what surrounds it. "
+    f"The interval may be at most {MAX_WINDOW_SEC:.0f} seconds wide; a wider one is refused with a message "
+    "rather than silently trimmed, so ask again for less. Text comes back as whole segments, so the span "
+    "returned can be a little wider than the one requested. An empty text means nothing is said in that "
+    "interval, usually because it is past the end of the recording."
+)
+
+
+@mcp.tool(description=WINDOW_DESCRIPTION)
+async def fetch_transcript_window(
+    ctx: Context,
+    transcript_id: Annotated[
+        str,
+        Field(description="Which transcript to read, as given by list_transcripts or a search hit."),
+    ],
+    start_sec: Annotated[float, Field(ge=0, description="Start of the interval, in seconds.")],
+    end_sec: Annotated[float, Field(gt=0, description="End of the interval, in seconds.")],
+) -> TranscriptWindow:
+    """Read around a point. See `WINDOW_DESCRIPTION` for the model-facing text."""
+    return await run_in_threadpool(_fetch_transcript_window, _headers(ctx), transcript_id, start_sec, end_sec)
+
+
+def _fetch_transcript_window(
+    headers: dict[str, str],
+    transcript_id: str,
+    start_sec: float,
+    end_sec: float,
+) -> TranscriptWindow:
+    """The blocking half of `fetch_transcript_window`.
+
+    Both failures become a `ToolError`, which reaches the model as text it
+    can act on. Any other exception would reach it as "Error executing
+    tool", which it can only retry blindly.
+    """
+    api_key = _calling_key(headers)
+
+    db = SessionLocal()
+    try:
+        window = transcript_window(db, transcript_id, start_sec, end_sec)
+    except ValueError as invalid:
+        raise ToolError(str(invalid)) from invalid
+    except LookupError as missing:
+        raise ToolError(f"no transcript {transcript_id}; call list_transcripts to see what exists") from missing
+    finally:
+        db.close()
+
+    logger.info(
+        "mcp.window.read",
+        api_key_hash=api_key.key_hash,
+        transcript_id=transcript_id,
+        start_sec=start_sec,
+        end_sec=end_sec,
+        characters=len(window.text),
+    )
+    return window
 
 
 def _transport_security() -> TransportSecuritySettings:

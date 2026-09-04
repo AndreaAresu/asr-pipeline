@@ -150,7 +150,11 @@ async def test_the_tools_are_registered_under_the_expected_names():
     A renamed tool or a broken schema fails nowhere in this repo: it fails
     inside somebody else's client, at the far end of a demo.
     """
-    assert {tool.name for tool in await mcp.list_tools()} == {"list_transcripts", "search_transcripts"}
+    assert {tool.name for tool in await mcp.list_tools()} == {
+        "list_transcripts",
+        "search_transcripts",
+        "fetch_transcript_window",
+    }
 
 
 @pytest.mark.anyio
@@ -206,3 +210,20 @@ async def test_a_hit_is_described_well_enough_to_be_quoted():
 
     hit = schema["$defs"]["SearchHit"]["properties"]
     assert {"audio_filename", "start", "end", "below_threshold"} <= set(hit)
+
+
+@pytest.mark.anyio
+async def test_the_window_tool_says_what_it_is_for_and_what_it_refuses():
+    """A model that does not know the cap exists will keep hitting it."""
+    description = (await a_tool("fetch_transcript_window")).description
+
+    assert "search_transcripts" in description
+    assert f"{server.MAX_WINDOW_SEC:.0f} seconds" in description
+    assert "refused" in description
+
+
+@pytest.mark.anyio
+async def test_the_window_tool_requires_an_interval():
+    schema = (await a_tool("fetch_transcript_window")).input_schema
+
+    assert schema["required"] == ["transcript_id", "start_sec", "end_sec"]
