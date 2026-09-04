@@ -15,6 +15,7 @@ in `server.py`.
 
 import json
 
+from starlette.concurrency import run_in_threadpool
 from starlette.types import Receive, Scope, Send
 
 from app.core.auth import credential_from_headers, resolve_api_key
@@ -55,7 +56,11 @@ class ApiKeyGate:
         scope["route"] = _McpRoute()
 
         headers = {name.decode(): value.decode() for name, value in scope.get("headers", [])}
-        if resolve_api_key(credential_from_headers(headers)) is None:
+        # The lookup is a blocking database query, and this runs on the event
+        # loop: FastAPI would have put `get_api_key` in a threadpool for us,
+        # and nothing does that for a raw ASGI app.
+        presented = credential_from_headers(headers)
+        if await run_in_threadpool(resolve_api_key, presented) is None:
             await self._unauthorized(send)
             return
 
