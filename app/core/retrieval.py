@@ -39,6 +39,19 @@ from app.db.models import Chunk, Job, Transcript
 # answer.
 CURATED_CORPUS_MARKER = "seed"
 
+# Below this cosine similarity a hit is noise. Measured, not guessed, on the
+# 109-chunk corpus (`scripts/search_eval.md`): 25 hits from five
+# out-of-distribution queries topped out at 0.224, while every hit a human
+# would keep sat at 0.372 or above, and 0.30 is the middle of that empty
+# band. It expires with the corpus - the same queries scored *negative* on a
+# single-chunk index - so re-run the evaluation before trusting it on a
+# different one.
+#
+# It is **reported, never applied**: `search_chunks` marks a hit below it and
+# returns it anyway. `demo/app.py` keeps its own copy of the number because
+# it is a separate service that cannot import this package.
+MIN_RELEVANT_SCORE = 0.30
+
 
 def mmss(seconds: float | None) -> str | None:
     """Render seconds as `mm:ss`, or None for a missing duration.
@@ -54,15 +67,32 @@ def mmss(seconds: float | None) -> str | None:
 
 
 class SearchHit(BaseModel):
-    """One matching chunk of a transcript."""
+    """One matching passage of a transcript.
 
-    transcript_id: str = Field(description="Transcript the chunk belongs to.")
-    chunk_index: int = Field(description="Position of the chunk within its transcript.")
-    start_sec: float = Field(description="Start of the chunk in the source audio, in seconds.")
-    end_sec: float = Field(description="End of the chunk in the source audio, in seconds.")
-    text: str = Field(description="Chunk text.")
+    A passage, not a document: these are the ~45-second chunks the
+    transcript was split into for indexing. Everything a caller needs to
+    quote one is on the object, because the two things that make it
+    quotable - the recording's name and the time as a reader would write
+    it - are otherwise two joins and a conversion away.
+    """
+
+    transcript_id: str = Field(description="Transcript the passage belongs to.")
+    audio_filename: str = Field(description="Source recording this passage came from, e.g. 'nasa-apollo11.mp3'.")
+    chunk_index: int = Field(description="Position of the passage within its transcript.")
+    start_sec: float = Field(description="Start of the passage in the source audio, in seconds.")
+    end_sec: float = Field(description="End of the passage in the source audio, in seconds.")
+    start: str = Field(description="Start of the passage as mm:ss, for quoting.")
+    end: str = Field(description="End of the passage as mm:ss, for quoting.")
+    text: str = Field(description="What is said in the passage.")
     score: float = Field(
         description="Cosine similarity to the query in [-1, 1]; 1 is identical. Computed as 1 - cosine_distance.",
+    )
+    below_threshold: bool = Field(
+        description=(
+            "True when the score is under 0.30, the measured noise floor for this corpus. Such a hit is "
+            "returned rather than dropped, because search always returns the nearest passages however far "
+            "away: treat it as 'the closest thing in the index', not as an answer."
+        ),
     )
 
 
@@ -91,15 +121,22 @@ def search_chunks(
             Searches everything indexed when omitted.
 
     Returns:
-        Hits ordered from most to least similar. An empty list means
-        nothing is indexed (or nothing matched the filter): retrieval
-        always returns the nearest neighbours however far away, so a low
-        top score is the signal that a query is out of distribution, not
-        an empty result.
+        Hits ordered from most to least similar, each marked with whether
+        it clears the measured noise floor. An empty list means nothing is
+        indexed (or nothing matched the filter): retrieval always returns
+        the nearest neighbours however far away, so a low top score - not
+        an empty result - is the signal that a query is out of
+        distribution. Weak hits are marked and returned, never dropped.
     """
     distance = Chunk.embedding.cosine_distance(query_embedding)
 
-    statement = select(Chunk, distance.label("distance"))
+    # The filename lives on `Job`, two joins from a chunk, and no caller can
+    # make those joins for itself.
+    statement = (
+        select(Chunk, distance.label("distance"), Job.audio_filename)
+        .join(Transcript, Chunk.transcript_id == Transcript.id)
+        .join(Job, Transcript.job_id == Job.id)
+    )
     if transcript_id is not None:
         statement = statement.where(Chunk.transcript_id == transcript_id)
     rows = db.execute(statement.order_by(distance).limit(top_k)).all()
@@ -107,13 +144,17 @@ def search_chunks(
     return [
         SearchHit(
             transcript_id=chunk.transcript_id,
+            audio_filename=audio_filename,
             chunk_index=chunk.chunk_index,
             start_sec=chunk.start_sec,
             end_sec=chunk.end_sec,
+            start=mmss(chunk.start_sec),
+            end=mmss(chunk.end_sec),
             text=chunk.text,
             score=1.0 - distance,
+            below_threshold=(1.0 - distance) < MIN_RELEVANT_SCORE,
         )
-        for chunk, distance in rows
+        for chunk, distance, audio_filename in rows
     ]
 
 

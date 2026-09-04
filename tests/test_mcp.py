@@ -150,7 +150,7 @@ async def test_the_tools_are_registered_under_the_expected_names():
     A renamed tool or a broken schema fails nowhere in this repo: it fails
     inside somebody else's client, at the far end of a demo.
     """
-    assert {tool.name for tool in await mcp.list_tools()} == {"list_transcripts"}
+    assert {tool.name for tool in await mcp.list_tools()} == {"list_transcripts", "search_transcripts"}
 
 
 @pytest.mark.anyio
@@ -173,3 +173,36 @@ async def test_the_descriptions_carry_the_facts_a_model_cannot_infer():
     assert "NASA" in tool.description
     assert "ONLY the curated corpus" in tool.description
     assert "search_transcripts searches the whole index" in tool.description
+
+
+async def a_tool(name: str):
+    (tool,) = [tool for tool in await mcp.list_tools() if tool.name == name]
+    return tool
+
+
+@pytest.mark.anyio
+async def test_the_search_tool_caps_how_much_it_can_be_asked_for():
+    """A client truncating an oversized tool response is an illegible failure."""
+    schema = (await a_tool("search_transcripts")).input_schema
+
+    assert schema["properties"]["top_k"]["maximum"] == server.MAX_TOOL_HITS
+    assert schema["required"] == ["query"]
+
+
+@pytest.mark.anyio
+async def test_the_search_description_says_what_a_result_actually_is():
+    """Passages, the whole index, and a weak hit marked rather than dropped."""
+    description = (await a_tool("search_transcripts")).description
+
+    assert "PASSAGES" in description
+    assert "WHOLE index" in description
+    assert "below_threshold" in description
+
+
+@pytest.mark.anyio
+async def test_a_hit_is_described_well_enough_to_be_quoted():
+    """The output schema is the other half of what the model reads."""
+    schema = (await a_tool("search_transcripts")).output_schema
+
+    hit = schema["$defs"]["SearchHit"]["properties"]
+    assert {"audio_filename", "start", "end", "below_threshold"} <= set(hit)

@@ -8,7 +8,14 @@ matter live (the curated-corpus filter, the limit). What actually comes back
 from pgvector belongs to `scripts/smoke_test.sh`.
 """
 
-from app.core.retrieval import CURATED_CORPUS_MARKER, list_curated_transcripts, search_chunks
+import pytest
+
+from app.core.retrieval import (
+    CURATED_CORPUS_MARKER,
+    MIN_RELEVANT_SCORE,
+    list_curated_transcripts,
+    search_chunks,
+)
 from app.db.models import Chunk
 
 
@@ -49,7 +56,7 @@ EMBEDDING = [0.0] * 384
 
 
 def test_a_row_becomes_a_hit_carrying_its_time_span():
-    db = FakeSession([(chunk(text="orbital mechanics", start=12.0, end=42.0), 0.25)])
+    db = FakeSession([(chunk(text="orbital mechanics", start=12.0, end=42.0), 0.25, "nasa-apollo11.mp3")])
 
     (hit,) = search_chunks(db, EMBEDDING, top_k=5)
 
@@ -60,7 +67,7 @@ def test_a_row_becomes_a_hit_carrying_its_time_span():
 
 def test_the_score_is_the_complement_of_the_cosine_distance():
     """pgvector returns a distance; callers rank on similarity."""
-    db = FakeSession([(chunk(), 0.25)])
+    db = FakeSession([(chunk(), 0.25, "nasa-apollo11.mp3")])
 
     (hit,) = search_chunks(db, EMBEDDING, top_k=5)
 
@@ -69,7 +76,7 @@ def test_the_score_is_the_complement_of_the_cosine_distance():
 
 def test_the_database_ordering_is_preserved():
     """Ordering and the limit both happen in Postgres; nothing re-sorts here."""
-    rows = [(chunk(chunk_index=i), 0.1 * i) for i in range(3)]
+    rows = [(chunk(chunk_index=i), 0.1 * i, "nasa-apollo11.mp3") for i in range(3)]
 
     hits = search_chunks(FakeSession(rows), EMBEDDING, top_k=3)
 
@@ -147,3 +154,60 @@ def test_a_transcript_with_no_duration_is_still_listable():
 
     assert entry.duration_sec is None
     assert entry.duration is None
+
+
+def test_a_hit_names_the_recording_it_came_from():
+    """A UUID is not a citation, and the filename is two joins away.
+
+    Nothing consuming a hit can make those joins itself: not the model
+    calling the tool, not the page rendering the result.
+    """
+    db = FakeSession([(chunk(), 0.25, "nasa-apollo11.mp3")])
+
+    (hit,) = search_chunks(db, EMBEDDING, top_k=5)
+
+    assert hit.audio_filename == "nasa-apollo11.mp3"
+
+
+def test_a_hit_carries_quotable_timestamps():
+    """"at 1094.3 seconds" is not something a reader can go and check."""
+    db = FakeSession([(chunk(start=1094.3, end=1140.0), 0.25, "nasa-apollo11.mp3")])
+
+    (hit,) = search_chunks(db, EMBEDDING, top_k=5)
+
+    assert (hit.start, hit.end) == ("18:14", "19:00")
+
+
+def test_a_weak_hit_is_marked_and_kept():
+    """Filtering silently would tell the caller the corpus holds nothing.
+
+    Retrieval always returns the nearest neighbours however far away, so a
+    weak hit is not an error: it is the answer "not found, and this was the
+    closest". Removing it turns that into "the corpus is empty on this
+    subject", which is a different and usually false claim.
+    """
+    distance_of_a_weak_hit = 1.0 - (MIN_RELEVANT_SCORE - 0.05)
+    db = FakeSession([(chunk(), distance_of_a_weak_hit, "nasa-apollo11.mp3")])
+
+    (hit,) = search_chunks(db, EMBEDDING, top_k=5)
+
+    assert hit.below_threshold is True
+    assert hit.score < MIN_RELEVANT_SCORE
+
+
+def test_a_strong_hit_is_not_marked():
+    db = FakeSession([(chunk(), 0.2, "nasa-apollo11.mp3")])
+
+    (hit,) = search_chunks(db, EMBEDDING, top_k=5)
+
+    assert hit.below_threshold is False
+
+
+def test_the_threshold_is_a_boundary_not_a_gap():
+    """Exactly at the threshold counts as relevant: it is a floor to clear."""
+    db = FakeSession([(chunk(), 1.0 - MIN_RELEVANT_SCORE, "nasa-apollo11.mp3")])
+
+    (hit,) = search_chunks(db, EMBEDDING, top_k=5)
+
+    assert hit.score == pytest.approx(MIN_RELEVANT_SCORE)
+    assert hit.below_threshold is False

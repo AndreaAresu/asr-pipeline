@@ -64,7 +64,9 @@ async def search(request: SearchRequest, api_key: ApiKey = Depends(get_api_key))
 
     Returns:
         The echoed query and its hits, ordered from most to least
-        similar. An empty `hits` list means nothing has been indexed yet
+        similar. Each hit carries the source filename, its time span in
+        seconds and as mm:ss, and whether it clears the measured noise
+        floor. An empty `hits` list means nothing has been indexed yet
         (or nothing matched the transcript filter), retrieval itself
         always returns the nearest neighbours, however far away, so a low
         top score is the signal that a query is out of distribution.

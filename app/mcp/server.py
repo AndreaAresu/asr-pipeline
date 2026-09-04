@@ -23,17 +23,24 @@ calling. Headers are client-supplied input, never an identity assertion,
 so the row is looked up rather than trusted.
 """
 
+from typing import Annotated
+
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import Field
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.core.auth import credential_from_headers, resolve_api_key
+from app.core.embeddings import embed_batch
 from app.core.logging import logger
 from app.core.retrieval import (
+    MIN_RELEVANT_SCORE,
+    SearchHit,
     TranscriptSummary,
     list_curated_transcripts,
+    search_chunks,
 )
 from app.db.models import ApiKey
 from app.db.session import SessionLocal
@@ -113,6 +120,69 @@ def _list_transcripts(headers: dict[str, str]) -> list[TranscriptSummary]:
 
     logger.info("mcp.transcripts.listed", api_key_hash=api_key.key_hash, transcripts=len(transcripts))
     return transcripts
+
+
+# A tool response has to survive the client's own cap, which is in the tens
+# of thousands of tokens. Ten passages of ~700 characters is comfortably
+# inside it; the HTTP endpoint keeps its own, looser limit, because a page
+# rendering 50 hits pays nothing for them.
+MAX_TOOL_HITS = 10
+
+SEARCH_DESCRIPTION = (
+    "Find where something is discussed in the indexed transcripts, by meaning rather than by keyword. "
+    f"Returns PASSAGES - {PASSAGE_LENGTH} each - not whole transcripts: quote them as excerpts, and use "
+    "fetch_transcript_window to read what surrounds one before relying on it. "
+    "Each hit carries the source filename and mm:ss times, so it can be cited directly. "
+    "Scores are cosine similarity in [-1, 1]. A hit under 0.30 comes back marked below_threshold, not "
+    f"removed: {MIN_RELEVANT_SCORE} is the measured noise floor for this corpus, so say 'the closest passage "
+    "was X, which does not really answer this' rather than concluding the corpus is silent on the subject. "
+    "This searches the WHOLE index, which includes recordings uploaded by visitors to the public demo, "
+    f"not only the curated corpus that list_transcripts shows. {CORPUS}"
+)
+
+
+@mcp.tool(description=SEARCH_DESCRIPTION)
+async def search_transcripts(
+    ctx: Context,
+    query: Annotated[
+        str,
+        Field(description="What to look for, in natural language. Meaning matters, wording does not."),
+    ],
+    top_k: Annotated[int, Field(ge=1, le=MAX_TOOL_HITS, description="How many passages to return.")] = 5,
+    transcript_id: Annotated[
+        str | None,
+        Field(description="Restrict the search to one transcript, by the id list_transcripts gives."),
+    ] = None,
+) -> list[SearchHit]:
+    """Search the index. See `SEARCH_DESCRIPTION` for the model-facing text."""
+    return await run_in_threadpool(_search_transcripts, _headers(ctx), query, top_k, transcript_id)
+
+
+def _search_transcripts(
+    headers: dict[str, str],
+    query: str,
+    top_k: int,
+    transcript_id: str | None,
+) -> list[SearchHit]:
+    """The blocking half of `search_transcripts`: embedding, then the query."""
+    api_key = _calling_key(headers)
+    query_embedding = embed_batch([query])[0]
+
+    db = SessionLocal()
+    try:
+        hits = search_chunks(db, query_embedding, top_k, transcript_id)
+    finally:
+        db.close()
+
+    logger.info(
+        "mcp.search.executed",
+        api_key_hash=api_key.key_hash,
+        query=query,
+        top_k=top_k,
+        hits=len(hits),
+        top_score=round(hits[0].score, 4) if hits else None,
+    )
+    return hits
 
 
 def _transport_security() -> TransportSecuritySettings:
