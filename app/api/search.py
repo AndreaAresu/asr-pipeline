@@ -13,7 +13,8 @@ from starlette.concurrency import run_in_threadpool
 from app.core.auth import get_api_key
 from app.core.embeddings import embed_batch
 from app.core.logging import logger
-from app.db.models import ApiKey, Chunk
+from app.core.retrieval import SearchHit, search_chunks
+from app.db.models import ApiKey
 from app.db.session import SessionLocal
 
 router = APIRouter()
@@ -30,19 +31,6 @@ class SearchRequest(BaseModel):
     )
 
 
-class SearchHit(BaseModel):
-    """One matching chunk of a transcript."""
-
-    transcript_id: str = Field(description="Transcript the chunk belongs to.")
-    chunk_index: int = Field(description="Position of the chunk within its transcript.")
-    start_sec: float = Field(description="Start of the chunk in the source audio, in seconds.")
-    end_sec: float = Field(description="End of the chunk in the source audio, in seconds.")
-    text: str = Field(description="Chunk text.")
-    score: float = Field(
-        description="Cosine similarity to the query in [-1, 1]; 1 is identical. Computed as 1 - cosine_distance.",
-    )
-
-
 class SearchResponse(BaseModel):
     """Ranked hits for a search query."""
 
@@ -51,30 +39,14 @@ class SearchResponse(BaseModel):
 
 
 def _search(query: str, top_k: int, transcript_id: str | None) -> list[SearchHit]:
-    """Run the blocking embed + vector query and map rows to hits."""
+    """Run the blocking embed + vector query, holding a session open for it."""
     query_embedding = embed_batch([query])[0]
 
     db = SessionLocal()
     try:
-        distance = Chunk.embedding.cosine_distance(query_embedding)
-        stmt = db.query(Chunk, distance.label("distance"))
-        if transcript_id is not None:
-            stmt = stmt.filter(Chunk.transcript_id == transcript_id)
-        rows = stmt.order_by(distance).limit(top_k).all()
+        return search_chunks(db, query_embedding, top_k, transcript_id)
     finally:
         db.close()
-
-    return [
-        SearchHit(
-            transcript_id=chunk.transcript_id,
-            chunk_index=chunk.chunk_index,
-            start_sec=chunk.start_sec,
-            end_sec=chunk.end_sec,
-            text=chunk.text,
-            score=1.0 - distance,
-        )
-        for chunk, distance in rows
-    ]
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -82,9 +54,8 @@ async def search(request: SearchRequest, api_key: ApiKey = Depends(get_api_key))
     """Return the transcript chunks most semantically similar to a query.
 
     The query is embedded with the same sentence-transformers model used
-    at index time, and ranked against stored chunk vectors by cosine
-    distance inside Postgres, the ordering and the LIMIT both happen in
-    the database, so only `top_k` rows come back.
+    at index time, and ranked by `app.core.retrieval.search_chunks`, which
+    the MCP server calls too: one ranking rule, two front ends.
 
     Args:
         request: Query text, result count, and optional transcript filter.
