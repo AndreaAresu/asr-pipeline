@@ -147,6 +147,10 @@ and set `SUMMARIZE_MODEL`.
 from `.env`, or the `demo` service was started before it was added. compose
 passes it through; there is no copy inside the image.
 
+**`scripts/benchmark.sh` dies immediately.** It needs `jq` on the machine
+you run it from. That is not in the API image, so on a fresh server it is an
+`apt-get install jq` away.
+
 **Image size.** Measured at 5.05 GB, dominated by one 3.27 GB dependency
 layer: a 1.7 GB venv plus 1.4 GB of `uv` download cache baked in beside it.
 If it is ~11 GB instead, the CUDA build of torch got in — `pyproject.toml`
