@@ -6,7 +6,7 @@
 #
 # Brings the whole stack up from a clean build, drives every endpoint in
 # the order a real client would, and tears down. Run it after any change
-# that touches the schema, the Dockerfile or the queue wiring — those are
+# that touches the schema, the Dockerfile or the queue wiring, those are
 # the failures unit tests do not catch.
 #
 # Env:
@@ -37,7 +37,7 @@ cleanup() {
 trap cleanup EXIT
 
 [[ -f "$AUDIO" ]] || fail "audio file not found: $AUDIO"
-[[ -f .env ]] || fail ".env not found — copy .env.example and fill it in"
+[[ -f .env ]] || fail ".env not found, copy .env.example and fill it in"
 
 step "building and starting the stack"
 docker compose up -d --build
@@ -61,7 +61,7 @@ step "creating an API key"
 # The key is printed once, on the last line of the script's output.
 KEY=$(docker compose exec -T api python -m scripts.create_api_key smoke | tail -1 | tr -d '[:space:]')
 [[ -n "$KEY" ]] || fail "could not create an API key"
-pass "created key ${KEY:0:8}…"
+pass "created key ${KEY:0:8}..."
 
 step "uploading $AUDIO"
 JOB=$(curl -fsS -X POST "$API_URL/transcribe" -H "X-API-Key: $KEY" -F "audio=@$AUDIO" | jq -r .job_id)
@@ -91,7 +91,7 @@ step "searching"
 HITS=$(jq -n '{query: "what is being discussed", top_k: 3}' \
   | curl -fsS -X POST "$API_URL/search" -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d @- \
   | jq '.hits | length')
-[[ "$HITS" -gt 0 ]] || fail "search returned no hits — chunks were not indexed"
+[[ "$HITS" -gt 0 ]] || fail "search returned no hits, chunks were not indexed"
 pass "search returned $HITS hit(s)"
 
 step "summarizing"

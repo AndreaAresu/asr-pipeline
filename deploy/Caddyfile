@@ -3,7 +3,7 @@
 #   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
 #
 # Caddy runs on the host, not as a compose service, so `docker compose down`
-# cannot take TLS down with it — the certificate and its renewal outlive any
+# cannot take TLS down with it, the certificate and its renewal outlive any
 # restart of the application.
 #
 # The hostname is the server's IPv4 with dashes instead of dots, under
@@ -15,7 +15,7 @@
 # reachable from outside and the API is reachable only through this proxy.
 
 api.159-195-250-205.sslip.io {
-	# /metrics declares no API key dependency — deliberately, so a scraper on
+	# /metrics declares no API key dependency, deliberately, so a scraper on
 	# the same host can read it without a credential. On a public address that
 	# would publish queue depths and job counts to anyone who asks.
 	#
@@ -27,7 +27,7 @@ api.159-195-250-205.sslip.io {
 	reverse_proxy 127.0.0.1:8080
 }
 
-# The Streamlit demo, on a second sslip.io name off the same address — no
+# The Streamlit demo, on a second sslip.io name off the same address, no
 # DNS work and a second certificate Caddy fetches on its own.
 #
 # It proxies to 8501, which compose binds to 127.0.0.1 like everything else,

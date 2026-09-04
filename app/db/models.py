@@ -101,7 +101,7 @@ class Summary(Base):
 
     Summarization is the only part of the pipeline that costs money and
     seconds per call, and its input (the transcript) never changes once
-    written — so the result is cached rather than recomputed. The
+    written, so the result is cached rather than recomputed. The
     transcript id doubles as the primary key, which makes "one summary
     per transcript" a constraint the database enforces rather than
     something the endpoint has to remember.
@@ -129,7 +129,7 @@ class ApiKey(Base):
     """An API key, stored only as the SHA-256 hash of its plaintext.
 
     `daily_minute_quota` is the key's allowance of *audio minutes* per
-    rolling 24h window (see `app.core.rate_limit`), not a request count —
+    rolling 24h window (see `app.core.rate_limit`), not a request count:
     a long upload costs proportionally more than a short one.
     """
 

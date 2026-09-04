@@ -8,7 +8,7 @@
 # The seed is a *filtered* dump, and both filters are load-bearing:
 #
 #   1. Only jobs whose audio_filename matches SEED_PATTERN (default 'nasa-%').
-#      The dev database accumulates rows — every smoke test, every trial of
+#      The dev database accumulates rows, every smoke test, every trial of
 #      the upload tab. A plain `pg_dump -t jobs -t transcripts -t chunks`
 #      would quietly publish them, and the corpus would stop matching the
 #      one scripts/search_eval.md reports Run 2 against.
@@ -66,7 +66,7 @@ if [[ -z "$SELECTED" ]]; then
   exit 1
 fi
 if grep -qv ' done$' <<<"$SELECTED"; then
-  echo "refusing to dump: a matching job is not 'done' —" >&2
+  echo "refusing to dump: a matching job is not 'done':" >&2
   echo "$SELECTED" >&2
   exit 1
 fi
@@ -93,7 +93,7 @@ cat > "$TMP" <<HEADER
 -- Demo corpus: three public-domain NASA podcast episodes, transcribed with
 -- small.en and indexed as $N_CHUNKS chunks. This is the data the public demo
 -- searches and summarizes, and the data scripts/search_eval.md reports Run 2
--- against — one transcription pass serving both, so the published evaluation
+-- against, one transcription pass serving both, so the published evaluation
 -- describes exactly what a reader can query.
 --
 -- Regenerate with scripts/dump_seed.sh; do not hand-edit, and do not replace

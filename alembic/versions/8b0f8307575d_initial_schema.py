@@ -4,9 +4,9 @@ Creates the full schema: api_keys, jobs, transcripts, chunks, summaries.
 
 Two hand-edits on top of what autogenerate produced, both required:
 
-* `CREATE EXTENSION vector` — autogenerate does not detect extensions, and
+* `CREATE EXTENSION vector`, autogenerate does not detect extensions, and
   the chunks.embedding column cannot be created without it.
-* the `pgvector` import — autogenerate emits a fully-qualified reference
+* the `pgvector` import, autogenerate emits a fully-qualified reference
   to `pgvector.sqlalchemy.vector.VECTOR` but does not import the module.
 
 Revision ID: 8b0f8307575d

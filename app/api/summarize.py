@@ -85,7 +85,7 @@ async def summarize(transcript_id: str, api_key: ApiKey = Depends(get_api_key)):
     round trip and a few thousand tokens.
 
     Args:
-        transcript_id: Id of the transcript to summarize — the `id` of a
+        transcript_id: Id of the transcript to summarize, the `id` of a
             `Transcript`, not the `job_id` that produced it.
         api_key: Authenticated caller, resolved from the `X-API-Key`
             header.

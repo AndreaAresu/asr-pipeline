@@ -16,7 +16,7 @@ Then, in two terminals:
 
 ```bash
 uv run fastapi dev app/main.py   # API on :8000
-uv run python -m app.workers.run # worker — jobs stay 'queued' without it
+uv run python -m app.workers.run # worker, jobs stay 'queued' without it
 ```
 
 `ffmpeg` must be on your PATH: faster-whisper shells out to it, and the
@@ -25,8 +25,8 @@ rate limiter uses `ffprobe` to read upload durations.
 ## Before you open a PR
 
 ```bash
-uv run ruff check .    # lint — CI runs this
-uv run pytest          # unit tests — CI runs this
+uv run ruff check .    # lint, CI runs this
+uv run pytest          # unit tests, CI runs this
 ```
 
 If your change touches the schema, the Dockerfile, or the queue wiring,
@@ -42,7 +42,7 @@ bash scripts/smoke_test.sh
 - **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/):
   `feat:`, `fix:`, `chore:`, `docs:`, `test:`. One logical change each.
 - **Schema changes** go through Alembic. Autogenerate the migration, then
-  read it — it does not detect `CREATE EXTENSION`, and it emits pgvector
+  read it, because it does not detect `CREATE EXTENSION`, and it emits pgvector
   column types without importing the module:
   ```bash
   uv run alembic revision --autogenerate -m "what changed"
@@ -50,7 +50,7 @@ bash scripts/smoke_test.sh
 - **Layering**: `app/core/` holds business logic and must not import
   FastAPI. `app/api/` is the HTTP layer and stays thin. This is what lets
   chunking, embedding and summarization be tested without a server.
-- **Sessions** are managed explicitly — open `SessionLocal()`, close it in
+- **Sessions** are managed explicitly: open `SessionLocal()`, close it in
   a `finally`. There is no request-scoped session; follow the surrounding
   pattern when adding routes.
 - **Docstrings** explain *why*, not *what*. The signature already says

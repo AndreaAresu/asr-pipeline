@@ -36,7 +36,7 @@ COPY pyproject.toml uv.lock README.md ./
 # `uv cache clean` runs in the same RUN as the sync, not a later one: a
 # later layer cannot shrink an earlier one, so the cache would stay in the
 # image regardless. UV_LINK_MODE=copy means the venv holds its own copies
-# of every package, so deleting the download cache leaves it intact — and
+# of every package, so deleting the download cache leaves it intact, and
 # it is not small: 1.4 GB of it beside a 1.7 GB venv, most of this image.
 RUN uv sync --frozen --no-dev --no-install-project \
     && uv cache clean

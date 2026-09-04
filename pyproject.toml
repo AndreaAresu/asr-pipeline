@@ -40,7 +40,7 @@ dev = [
 # 750MB in the image rather than dragging the CUDA stack in behind it. The
 # image measured 11.6GB before this pin and 3.17GB after (the latter on the
 # deployed server, 2026-09-04, once the uv cache was also dropped from the
-# dependency layer — see the Dockerfile). That is the difference between a
+# dependency layer, see the Dockerfile). That is the difference between a
 # deploy that completes and one that times out.
 # Scoped to Linux: macOS wheels are CPU-only already, so local development is
 # untouched.

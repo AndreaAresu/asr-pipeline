@@ -43,9 +43,9 @@ def main() -> None:
         for c in chunks:
             dur = c["end_sec"] - c["start_sec"]
             ov = "" if prev is None else f" overlap_prev={prev['end_sec'] - c['start_sec']:+.1f}s"
-            print(f"[{c['chunk_index']:>2}] {c['start_sec']:7.1f}–{c['end_sec']:7.1f}s "
+            print(f"[{c['chunk_index']:>2}] {c['start_sec']:7.1f}-{c['end_sec']:7.1f}s "
                   f"({dur:4.1f}s, {len(c['text']):>4} chars){ov}")
-            print(f"      {c['text'][:110]}{'…' if len(c['text']) > 110 else ''}")
+            print(f"      {c['text'][:110]}{'...' if len(c['text']) > 110 else ''}")
             prev = c
 
         # --- anomaly scan ---

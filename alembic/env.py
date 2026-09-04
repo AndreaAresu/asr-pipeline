@@ -2,7 +2,7 @@
 
 The database URL is taken from the application `Settings` rather than
 from alembic.ini, so migrations always target whatever the app itself
-would connect to — including in containers, where the URL is assembled
+would connect to, including in containers, where the URL is assembled
 from injected environment variables. No credentials live in alembic.ini.
 
 `app.db.models` is imported for its side effect of registering every

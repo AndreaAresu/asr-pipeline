@@ -31,7 +31,7 @@ def test_the_budget_grows_with_the_recording():
 
 
 def test_an_unknown_duration_still_gets_a_budget():
-    """duration is nullable — a job that failed before probing has none."""
+    """duration is nullable, a job that failed before probing has none."""
     assert stale_cutoff_for(None) >= MIN_STALE_TIMEOUT
 
 
@@ -44,7 +44,7 @@ def test_a_missing_wait_status_is_not_an_error():
     """RQ passes None on some paths.
 
     Doing the arithmetic unguarded raises inside the failure handler, and
-    the failure it was reporting is lost with it — which is exactly how
+    the failure it was reporting is lost with it, which is exactly how
     this went wrong the first time.
     """
     assert killing_signal(None) is None
@@ -65,7 +65,7 @@ def test_a_job_whose_row_is_gone_is_not_a_crash(tmp_path, monkeypatch):
     """The queue can outlive the database it points into.
 
     Redis holds the job id, Postgres holds the row, and nothing ties the
-    two lifetimes together — so a recreated volume or a restored dump
+    two lifetimes together, so a recreated volume or a restored dump
     leaves queued ids with no row behind them. Dereferencing that `None`
     raised `AttributeError: 'NoneType' object has no attribute 'status'`
     and turned a stale queue entry into a traceback, while the failure

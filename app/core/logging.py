@@ -1,7 +1,7 @@
 """Structured JSON logging built on structlog.
 
 `setup_logging()` configures a structlog processor pipeline that emits
-one JSON object per log line — suitable for shipping to a log
+one JSON object per log line, suitable for shipping to a log
 aggregator. Call it once at process startup (both the API and the RQ
 worker are separate processes and each must configure its own logging).
 
@@ -22,8 +22,8 @@ import structlog
 def setup_logging() -> None:
     """Configure structlog to render events as JSON.
 
-    Pipeline: merge_contextvars → add_log_level → ISO TimeStamper →
-    JSONRenderer. Idempotent — safe to call more than once.
+    Pipeline: merge_contextvars -> add_log_level -> ISO TimeStamper ->
+    JSONRenderer. Idempotent, safe to call more than once.
     """
     structlog.configure(
         processors=[

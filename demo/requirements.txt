@@ -1,5 +1,5 @@
 # demo/Dockerfile installs from this file. Keep it to the two packages the
-# demo actually needs — it is a thin HTTP client, and pulling in the API's
+# demo actually needs, it is a thin HTTP client, and pulling in the API's
 # dependencies (torch, faster-whisper) would take this image from ~150MB to
 # gigabytes for no gain.
 streamlit>=1.40

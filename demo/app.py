@@ -3,8 +3,8 @@
 A thin client over the API: it holds no logic of its own, just calls
 `/search` and `/summarize` and renders what comes back. It lives outside
 `app/` and has its own requirements.txt and Dockerfile because the two
-images should stay apart — the API image carries torch, this one must not,
-and this one carries Streamlit, which the worker must not.
+images should stay apart: the API image carries torch and this one must
+not, and this one carries Streamlit, which the worker must not.
 
 Runs as the `demo` service in compose, on the same host as the API, not on
 Streamlit Community Cloud: a community-cloud app sleeps when idle and
@@ -17,14 +17,14 @@ face and reaches the API over the compose network.
 
 Configuration comes from the environment (compose passes it in):
 
-    ASR_API_URL   base URL of the API — http://api:8080 inside compose
+    ASR_API_URL   base URL of the API, http://api:8080 inside compose
     ASR_API_KEY   a demo key with a deliberately low daily quota
 
     MAX_UPLOAD_MB, MAX_AUDIO_SECONDS
                   the API's own upload caps, passed in so the UI can state
                   them before a visitor picks a file. compose feeds both
                   services from the same .env values, so the numbers shown
-                  here are the numbers actually enforced — a UI that
+                  here are the numbers actually enforced, a UI that
                   hardcoded its own would drift the moment either changed.
 """
 
@@ -50,13 +50,13 @@ ACCEPTED_TYPES = ["wav", "mp3", "m4a", "flac", "mp4"]
 # Below this cosine similarity a hit is noise, and the demo says so instead
 # of rendering it like any other result. Retrieval always returns the nearest
 # neighbours however far away, so a query the corpus does not cover still
-# comes back with top_k rows — presenting them with the same dignity as good
+# comes back with top_k rows, presenting them with the same dignity as good
 # ones is the misleading part, not the ranking.
 #
 # 0.30 is measured, not guessed: on this 109-chunk corpus, 25 hits from five
 # out-of-distribution queries top out at 0.224, while every hit a human would
 # keep sits at 0.372 or above. Nothing lands in between, and 0.30 is the
-# middle of that empty band — as far as the data allows from both ways of
+# middle of that empty band, as far as the data allows from both ways of
 # being wrong. Widening the out-of-distribution sample pushed the ceiling
 # from 0.188 to 0.224, so the headroom above matters as much as below.
 #
@@ -66,7 +66,7 @@ ACCEPTED_TYPES = ["wav", "mp3", "m4a", "flac", "mp4"]
 MIN_RELEVANT_SCORE = 0.30
 
 # How long to keep polling a job before giving up on the UI side. The job
-# itself is not cancelled — it stays in the queue and finishes — so this
+# itself is not cancelled (it stays in the queue and finishes), so this
 # only bounds how long the page waits.
 POLL_TIMEOUT_SEC = 600
 POLL_INTERVAL_SEC = 2
@@ -76,9 +76,9 @@ POLL_INTERVAL_SEC = 2
 # the environment so a deployment with a different corpus can point these
 # elsewhere without touching the code.
 EPISODES = {
-    "NASA — Gateway: Together to the Moon": os.environ.get("DEMO_TRANSCRIPT_GATEWAY", ""),
-    "NASA — Astronaut and Microbiologist": os.environ.get("DEMO_TRANSCRIPT_MICROBIOLOGY", ""),
-    "NASA — Apollo 11 to Now": os.environ.get("DEMO_TRANSCRIPT_APOLLO", ""),
+    "Gateway: Together to the Moon (NASA)": os.environ.get("DEMO_TRANSCRIPT_GATEWAY", ""),
+    "Astronaut and Microbiologist (NASA)": os.environ.get("DEMO_TRANSCRIPT_MICROBIOLOGY", ""),
+    "Apollo 11 to Now (NASA)": os.environ.get("DEMO_TRANSCRIPT_APOLLO", ""),
 }
 
 st.set_page_config(page_title="ASR Pipeline Demo", layout="wide", page_icon="🎙️")
@@ -135,7 +135,7 @@ def _interpret(response: requests.Response) -> tuple[dict | None, str | None]:
         return None, _detail(response, "The upload is over one of the demo's limits.")
     if response.status_code == 429:
         return None, (
-            "The demo key's shared daily quota is exhausted — everyone using "
+            "The demo key's shared daily quota is exhausted: everyone using "
             "this page draws on the same one. It refills on a rolling 24h "
             "window, so try again later."
         )
@@ -168,13 +168,13 @@ def render_summary(payload: dict) -> None:
     """
     meta = payload["meta"]
     st.caption(
-        f"{payload['model']} · {'cached' if payload['cached'] else 'freshly generated'} · "
+        f"{payload['model']} | {'cached' if payload['cached'] else 'freshly generated'} | "
         f"{meta['input_tokens']} in / {meta['output_tokens']} out tokens"
     )
     for section in payload["sections"]:
         header = (
-            f"{section['title']}  ·  "
-            f"{fmt_time(section['start_sec'])}–{fmt_time(section['end_sec'])}"
+            f"{section['title']}  |  "
+            f"{fmt_time(section['start_sec'])}-{fmt_time(section['end_sec'])}"
         )
         with st.expander(header, expanded=True):
             for point in section["key_points"]:
@@ -187,7 +187,7 @@ def render_hit(hit: dict) -> None:
         score_col, text_col = st.columns([1, 6])
         with score_col:
             st.metric("Score", f"{hit['score']:.3f}")
-            st.caption(f"{fmt_time(hit['start_sec'])}–{fmt_time(hit['end_sec'])}")
+            st.caption(f"{fmt_time(hit['start_sec'])}-{fmt_time(hit['end_sec'])}")
         with text_col:
             st.write(hit["text"])
 
@@ -237,9 +237,9 @@ def poll_until_finished(job_id: str, status_box) -> tuple[dict | None, str | Non
         if job["status"] != seen:
             seen = job["status"]
             if seen == "queued":
-                status_box.update(label="Queued — waiting for the worker to pick it up")
+                status_box.update(label="Queued, waiting for the worker to pick it up")
             elif seen == "processing":
-                status_box.update(label="Transcribing…")
+                status_box.update(label="Transcribing...")
 
         if job["status"] == "done":
             return job, None
@@ -250,7 +250,7 @@ def poll_until_finished(job_id: str, status_box) -> tuple[dict | None, str | Non
 
     return None, (
         f"Still running after {POLL_TIMEOUT_SEC // 60} minutes. The job was not "
-        "cancelled — reload and it may have finished."
+        "cancelled. Reload and it may have finished."
     )
 
 
@@ -269,7 +269,7 @@ with transcribe_tab:
     st.info(
         f"{describe_limits()}  \n"
         "The daily quota is shared by everyone using this page, and there is "
-        "a single worker — if someone else is mid-transcription, yours waits "
+        "a single worker: if someone else is mid-transcription, yours waits "
         "in line behind theirs."
     )
 
@@ -295,11 +295,11 @@ with transcribe_tab:
     if st.button("Transcribe", type="primary", disabled=uploaded is None or bool(oversize)):
         # st.status renders as a collapsed expander, so anything written
         # inside it is one click away from being read. The status box gets
-        # the progress label and nothing else; the failure message — which
+        # the progress label and nothing else; the failure message, which
         # is the one thing a rejected visitor must see, since it names the
-        # limit that was hit — is rendered after the block, in the open.
+        # limit that was hit, is rendered after the block, in the open.
         error = None
-        with st.status("Uploading…") as status_box:
+        with st.status("Uploading...") as status_box:
             payload, error = api_post(
                 "/transcribe",
                 files={"audio": (uploaded.name, uploaded.getvalue())},
@@ -308,7 +308,7 @@ with transcribe_tab:
                 status_box.update(label="Rejected", state="error")
             else:
                 job_id = payload["job_id"]
-                status_box.update(label=f"Accepted as job {job_id} — HTTP 202")
+                status_box.update(label=f"Accepted as job {job_id} (HTTP 202)")
                 job, error = poll_until_finished(job_id, status_box)
 
                 if not error:
@@ -334,10 +334,10 @@ with transcribe_tab:
     own = st.session_state.get("own")
     if own:
         st.divider()
-        duration = f" · {fmt_time(own['duration'])}" if own.get("duration") else ""
+        duration = f" | {fmt_time(own['duration'])}" if own.get("duration") else ""
         st.markdown(f"**{own['filename']}**{duration}")
         st.text_area("Transcript", own["full_text"], height=200)
-        st.caption(f"transcript_id `{own['transcript_id']}` — indexed and searchable.")
+        st.caption(f"transcript_id `{own['transcript_id']}` is indexed and searchable.")
 
         own_query = st.text_input(
             "Search inside this transcript",
@@ -351,12 +351,12 @@ with transcribe_tab:
             # MIN_RELEVANT_SCORE deliberately does not apply here. It was
             # calibrated on 109 chunks of 45s each; a 35s upload is one chunk
             # holding everything, and a well-aimed query against it measured
-            # 0.309-0.325 — correct answers that sit on top of the cutoff,
+            # 0.309-0.325, correct answers that sit on top of the cutoff,
             # because the passage is diluted rather than irrelevant. A short
             # file would look broken. The visitor also already knows the
             # subject: they just uploaded it, so "is anything here relevant"
             # is not the question this box answers.
-            with st.spinner("Searching your transcript…"):
+            with st.spinner("Searching your transcript..."):
                 payload, error = api_post(
                     "/search",
                     json={"query": own_query, "top_k": 3, "transcript_id": own["transcript_id"]},
@@ -364,18 +364,18 @@ with transcribe_tab:
             if error:
                 st.error(error)
             elif not payload["hits"]:
-                st.warning("No hits — the file may be too short to have produced a chunk.")
+                st.warning("No hits. The file may be too short to have produced a chunk.")
             else:
                 for hit in payload["hits"]:
                     with st.container(border=True):
                         st.caption(
-                            f"{fmt_time(hit['start_sec'])}–{fmt_time(hit['end_sec'])} "
-                            f"· score {hit['score']:.3f}"
+                            f"{fmt_time(hit['start_sec'])}-{fmt_time(hit['end_sec'])} "
+                            f"| score {hit['score']:.3f}"
                         )
                         st.write(hit["text"])
 
         if st.button("Summarize this transcript"):
-            with st.spinner("Summarizing…"):
+            with st.spinner("Summarizing..."):
                 payload, error = api_post(f"/summarize/{own['transcript_id']}")
             # Stored, not rendered here: a button is True for one rerun only,
             # so rendering inline would make the summary disappear as soon as
@@ -396,7 +396,7 @@ with transcribe_tab:
 with search_tab:
     st.subheader("Semantic search")
     st.write(
-        "Matches meaning, not keywords — the query does not have to use the "
+        "Matches meaning rather than keywords: the query does not have to use the "
         "words that were actually spoken. Three NASA podcast episodes are "
         "indexed, about 67 minutes of audio in 109 passages."
     )
@@ -412,13 +412,13 @@ with search_tab:
     top_k = st.slider("Results", min_value=1, max_value=10, value=5)
 
     if st.button("Search", type="primary") and query:
-        with st.spinner("Searching…"):
+        with st.spinner("Searching..."):
             payload, error = api_post("/search", json={"query": query, "top_k": top_k})
 
         if error:
             st.error(error)
         elif not payload["hits"]:
-            st.warning("No hits — nothing is indexed on this deployment yet.")
+            st.warning("No hits. Nothing is indexed on this deployment yet.")
         else:
             # The API is left as a pure ranking engine and the cut is made
             # here, for two reasons: the threshold moves with the corpus, so
@@ -443,7 +443,7 @@ with search_tab:
             if weak:
                 # Shown on request rather than hidden: that retrieval always
                 # returns the nearest neighbours, however far away, is the
-                # thing worth understanding here — not something to conceal.
+                # thing worth understanding here, not something to conceal.
                 label = (
                     "Show the nearest matches anyway"
                     if not relevant
@@ -451,7 +451,7 @@ with search_tab:
                 )
                 with st.expander(label):
                     st.caption(
-                        "Below the cutoff. Ranking never fails — it returns the "
+                        "Below the cutoff. Ranking never fails: it returns the "
                         "closest vectors it has, so these are what the corpus "
                         "offers when it has nothing on the subject."
                     )
@@ -463,7 +463,7 @@ with summarize_tab:
     st.write(
         "The transcript is sent to an LLM with inline timestamp markers, so "
         "section times are quoted from the audio rather than invented. The "
-        "model that answered is named under each result — the deployment "
+        "model that answered is named under each result, the deployment "
         "picks it, because hosted models get retired. Results are cached: "
         "the first call takes seconds, every later one is a database lookup."
     )
@@ -475,7 +475,7 @@ with summarize_tab:
         choice = st.selectbox("Episode", list(labelled))
 
         if st.button("Summarize", type="primary"):
-            with st.spinner("Summarizing…"):
+            with st.spinner("Summarizing..."):
                 payload, error = api_post(f"/summarize/{labelled[choice]}")
 
             if error:

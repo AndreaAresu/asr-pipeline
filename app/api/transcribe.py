@@ -56,7 +56,7 @@ async def _spool_upload(audio: UploadFile, tmp_path: str) -> None:
     """Stream the upload to `tmp_path`, refusing it once it exceeds the cap.
 
     The check runs per block, not after the write. Reading the whole body
-    first — `await audio.read()` with no argument — hands the caller the
+    first (`await audio.read()` with no argument) hands the caller the
     disk and the process memory before anything has a chance to object,
     which matters here because the duration check that follows can only run
     once the file has landed. The quota is measured in audio minutes and is
@@ -93,7 +93,7 @@ def _enforce_duration_limit(duration: float) -> None:
     limit = settings.max_audio_seconds
     if limit and duration > limit:
         # Two decimals, not zero: the check is `>`, so a recording can be
-        # over the limit by hundredths of a second — `ffmpeg -t 90 -c copy`
+        # over the limit by hundredths of a second, `ffmpeg -t 90 -c copy`
         # yields 90.05s, which rounded to the nearest second told the caller
         # "audio is 90s long; the limit is 90s" and read as a bug in the
         # service rather than a boundary in their file.
@@ -139,8 +139,8 @@ async def transcribe(audio: UploadFile, api_key: ApiKey = Depends(get_api_key)):
         )
         raise HTTPException(400, 'unsupported audio format')
     job_id = str(uuid.uuid4())
-    # The worker is a different process — and under compose a different
-    # container — so the upload has to land somewhere both of them can see.
+    # The worker is a different process, and under compose a different
+    # container, so the upload has to land somewhere both of them can see.
     # temp_audio_dir is that shared spool; the worker deletes the file when
     # the job ends.
     os.makedirs(settings.temp_audio_dir, exist_ok=True)

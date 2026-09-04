@@ -1,7 +1,7 @@
 """Prometheus metrics for the `/metrics` endpoint.
 
-The interesting numbers here — how many jobs are in each state, how much
-audio has been transcribed — are produced by the *worker*, in a different
+The interesting numbers here (how many jobs are in each state, how much
+audio has been transcribed) are produced by the *worker*, in a different
 process (and under compose, a different container) from the API that
 serves `/metrics`. Ordinary in-process counters would therefore always
 read zero: the API never runs a job, so it never increments them.
@@ -49,8 +49,8 @@ class JobStateCollector:
     """Collects job metrics from Postgres on each scrape.
 
     Yields:
-        `asr_jobs_total` — jobs by status, and
-        `asr_audio_seconds_processed_total` — audio seconds successfully
+        `asr_jobs_total`: jobs by status, and
+        `asr_audio_seconds_processed_total`, audio seconds successfully
         transcribed.
 
     A database error during a scrape is logged and swallowed: metrics
@@ -74,7 +74,7 @@ class JobStateCollector:
         try:
             rows = db.query(Job.status, func.count(Job.id)).group_by(Job.status).all()
             # Always emit every state, so a status that has not occurred yet
-            # reads 0 instead of vanishing from the output — a series that
+            # reads 0 instead of vanishing from the output, a series that
             # disappears is much harder to alert on than one that is zero.
             counts = {"queued": 0, "processing": 0, "done": 0, "failed": 0}
             counts.update({status: count for status, count in rows})

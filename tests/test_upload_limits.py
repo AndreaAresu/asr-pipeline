@@ -75,7 +75,7 @@ def test_a_barely_over_recording_says_so_instead_of_contradicting_itself(monkeyp
     """The check is `>`, so a file can lose by hundredths of a second.
 
     `ffmpeg -t 90 -c copy` produces 90.05s, and the message rounded that to
-    the nearest second: "audio is 90s long; the limit is 90s" — which reads
+    the nearest second: "audio is 90s long; the limit is 90s", which reads
     as the service being broken rather than the file being over. Measured on
     the deployed VPS, by cutting a clip at exactly the cap.
     """

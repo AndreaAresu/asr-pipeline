@@ -3,7 +3,7 @@
 Deliberately narrow: they assert the app imports, the routes are wired,
 and unauthenticated callers are turned away. Anything that needs Postgres,
 Redis or a model lives in `scripts/smoke_test.sh`, which runs the real
-stack — faking those here would test the fakes.
+stack, faking those here would test the fakes.
 """
 
 import pytest
@@ -68,7 +68,7 @@ def test_protected_endpoints_reject_missing_keys(client, method, path, kwargs):
 
 
 def test_the_console_is_served_at_the_root(client):
-    """The UI ships with the API — one process, no build step."""
+    """The UI ships with the API, one process, no build step."""
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]

@@ -129,7 +129,7 @@
 <div class="wrap">
 
   <header>
-    <h1>ASR Pipeline <span>· console</span></h1>
+    <h1>ASR Pipeline <span>/ console</span></h1>
     <div class="key-box">
       <span class="dot" id="keyDot" title="API key status"></span>
       <input type="password" id="apiKey" placeholder="X-API-Key" autocomplete="off">
@@ -144,13 +144,13 @@
     <h2>Transcribe</h2>
     <div id="drop">
       <strong>Drop an audio file here</strong>
-      <small>or click to choose · wav, mp3, m4a, flac, mp4</small>
+      <small>or click to choose: wav, mp3, m4a, flac, mp4</small>
     </div>
     <input type="file" id="file" accept=".wav,.mp3,.m4a,.flac,.mp4">
     <div id="uploadMsg"></div>
     <p class="note">
       Transcription runs at roughly half of real time on CPU, so an hour of
-      audio takes about half an hour. The page keeps polling — you can leave
+      audio takes about half an hour. The page keeps polling, so you can leave
       and come back.
     </p>
   </section>
@@ -260,7 +260,7 @@
     }
     const body = new FormData();
     body.append("audio", file);
-    msg($("uploadMsg"), `Uploading ${file.name}…`, "ok");
+    msg($("uploadMsg"), `Uploading ${file.name}...`, "ok");
 
     try {
       const res = await api("/transcribe", { method: "POST", body });
@@ -313,7 +313,7 @@
       j.duration ? `${fmtTime(j.duration)} of audio` : null,
       j.created_at ? new Date(j.created_at).toLocaleString() : null,
       j.error_message,
-    ].filter(Boolean).join(" · ");
+    ].filter(Boolean).join(" | ");
 
     const bar = j.status === "processing" ? '<div class="bar"><i></i></div>' : "";
     return `<div class="job">
@@ -349,7 +349,7 @@
     const query = $("q").value.trim();
     if (!query) return;
     const out = $("hits");
-    out.innerHTML = '<p class="empty">Searching…</p>';
+    out.innerHTML = '<p class="empty">Searching...</p>';
 
     try {
       const res = await api("/search", {
@@ -364,11 +364,11 @@
         ? hits.map((h) => `<div class="hit">
              <div>
                <div class="score">${h.score.toFixed(3)}</div>
-               <div class="time">${fmtTime(h.start_sec)}–${fmtTime(h.end_sec)}</div>
+               <div class="time">${fmtTime(h.start_sec)}-${fmtTime(h.end_sec)}</div>
              </div>
              <div>${escapeHtml(h.text)}</div>
            </div>`).join("")
-        : '<p class="empty">No hits — nothing indexed yet.</p>';
+        : '<p class="empty">No hits. Nothing indexed yet.</p>';
     } catch {
       msg(out, "Could not reach the API.");
     }
@@ -381,21 +381,21 @@
     const id = $("transcriptSel").value;
     const out = $("summary");
     if (!id) { msg(out, "No transcript selected."); return; }
-    out.innerHTML = '<p class="empty">Summarizing… first time takes a few seconds.</p>';
+    out.innerHTML = '<p class="empty">Summarizing... first time takes a few seconds.</p>';
 
     try {
       const res = await api(`/summarize/${id}`, { method: "POST" });
       if (!res.ok) { msg(out, await errorText(res)); return; }
 
       const data = await res.json();
-      const meta = `${data.model} · ${data.cached ? "cached" : "generated"}` +
-        ` · ${data.meta.input_tokens} in / ${data.meta.output_tokens} out tokens` +
-        (data.meta.transcript_thinned ? " · transcript thinned to fit the model" : "");
+      const meta = `${data.model} | ${data.cached ? "cached" : "generated"}` +
+        ` | ${data.meta.input_tokens} in / ${data.meta.output_tokens} out tokens` +
+        (data.meta.transcript_thinned ? " | transcript thinned to fit the model" : "");
 
       out.innerHTML = data.sections.map((s) => `
         <details open>
           <summary><span>${escapeHtml(s.title)}</span>
-            <span class="time">${fmtTime(s.start_sec)}–${fmtTime(s.end_sec)}</span></summary>
+            <span class="time">${fmtTime(s.start_sec)}-${fmtTime(s.end_sec)}</span></summary>
           <ul>${s.key_points.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>
         </details>`).join("") + `<p class="note">${escapeHtml(meta)}</p>`;
     } catch {

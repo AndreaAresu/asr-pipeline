@@ -103,7 +103,7 @@ def test_untitled_sections_get_a_placeholder():
 
 
 def long_segments(count: int, chars: int = 60):
-    """Segments of a fixed text length, 5s apart — a stand-in for a long interview."""
+    """Segments of a fixed text length, 5s apart, a stand-in for a long interview."""
     return [
         {"start": i * 5.0, "end": i * 5.0 + 5.0, "text": "x" * chars}
         for i in range(count)

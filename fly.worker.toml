@@ -2,7 +2,7 @@
 #
 #   flyctl deploy -c fly.worker.toml
 #
-# Same image as the API, different command and a much bigger VM — Whisper
+# Same image as the API, different command and a much bigger VM, Whisper
 # runs here. No [http_service]: the worker exposes nothing, it only pulls
 # from Redis.
 

@@ -3,7 +3,7 @@
 #   docker compose up -d --build
 #
 # API and worker run the same image and differ only in command. Both wait
-# for Postgres and Redis to report healthy — without that they start while
+# for Postgres and Redis to report healthy, without that they start while
 # the databases are still booting and crash on their first connection.
 
 services:
@@ -44,7 +44,7 @@ services:
     build: .
     restart: unless-stopped
     # Migrations run here, once, before the server binds. The worker does
-    # not migrate — two processes racing on the same DDL is how you get a
+    # not migrate, two processes racing on the same DDL is how you get a
     # half-applied schema.
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080"
     environment: &app_env
@@ -58,7 +58,7 @@ services:
       # This block is the ONLY channel between the host's .env and the
       # containers: .dockerignore excludes .env, so nothing inside the image
       # ever reads that file. A setting added to app/config.py and left out
-      # here is silently inert in every deployment — it does not warn, it
+      # here is silently inert in every deployment, it does not warn, it
       # just runs on its default. Add new settings in both places.
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       SUMMARIZE_MODEL: ${SUMMARIZE_MODEL:-openai/gpt-oss-120b}

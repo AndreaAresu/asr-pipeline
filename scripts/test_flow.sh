@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Minimal upload → poll → print flow, for a quick manual check against a
+# Minimal upload -> poll -> print flow, for a quick manual check against a
 # locally running API and worker. `scripts/smoke_test.sh` is the thorough
 # one; this is what you run while iterating.
 #
@@ -17,7 +17,7 @@ API_URL="${ASR_API_URL:-http://localhost:8000}"
 AUDIO="${1:-data/samples/sample.wav}"
 
 if [[ -z "${ASR_API_KEY:-}" ]]; then
-  echo "ASR_API_KEY is not set — create one with:" >&2
+  echo "ASR_API_KEY is not set, create one with:" >&2
   echo "  uv run python scripts/create_api_key.py dev" >&2
   exit 1
 fi

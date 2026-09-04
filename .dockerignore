@@ -11,7 +11,7 @@ __pycache__/
 build/
 dist/
 
-# Secrets — the container gets its config from the environment.
+# Secrets: the container gets its config from the environment.
 .env
 
 # Local media, planning docs, agent instructions.

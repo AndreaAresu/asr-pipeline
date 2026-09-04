@@ -22,7 +22,7 @@ def list_jobs(
 
     Scoped to the authenticated key: a caller sees the jobs it submitted
     and nothing else. Exists so a client can rebuild its view of work in
-    flight without having remembered every job id — the web UI relies on
+    flight without having remembered every job id, the web UI relies on
     it after a page reload.
 
     Args:
@@ -136,7 +136,7 @@ def get_result(job_id: str, api_key: ApiKey = Depends(get_api_key)):
 
     Returns:
         A JSON object with `transcript_id` (the handle `/search` results
-        and `/summarize/{transcript_id}` are keyed by — distinct from the
+        and `/summarize/{transcript_id}` are keyed by, distinct from the
         job id), `full_text`, detected `language`, and `segments`
         (per-segment text with word-level alignment, as stored in
         `Transcript.word_timestamps`).

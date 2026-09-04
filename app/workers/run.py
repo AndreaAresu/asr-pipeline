@@ -40,8 +40,8 @@ def main() -> None:
     logger.info("worker.starting", worker_class=worker_cls.__name__, queue="transcribe")
 
     # Only the forking worker has a work-horse to lose. SimpleWorker runs the
-    # job in this very process, so a kill takes the handler down with it —
-    # nothing can record the failure from inside a dead process, and on macOS
+    # job in this very process, so a kill takes the handler down with it.
+    # Nothing can record the failure from inside a dead process, and on macOS
     # the startup reaper remains the only backstop.
     kwargs = {}
     if worker_cls is Worker:

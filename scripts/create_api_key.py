@@ -5,8 +5,8 @@ Usage:
 
 Generates a cryptographically secure random key, stores only its SHA-256
 hash in the database (alongside the given name), and prints the key in
-clear text exactly once. The plaintext is never persisted, so copy it now
-— it cannot be recovered later.
+clear text exactly once. The plaintext is never persisted, so copy it now:
+it cannot be recovered later.
 
 The quota is audio *minutes* per rolling 24h window, not a request count
 (see `app.core.rate_limit`). The default suits casual use; indexing long
@@ -64,7 +64,7 @@ def main() -> None:
         session.close()
 
     print(f"API key created for {name!r} with a quota of {quota} audio minutes per day.")
-    print("Store it now — this is the only time it will be shown:")
+    print("Store it now, this is the only time it will be shown:")
     print()
     print(f"    {key}")
 

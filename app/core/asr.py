@@ -40,7 +40,7 @@ class ASRModel:
 
     Loading the underlying model is expensive (hundreds of MB of memory and
     several seconds of startup), so an instance of this class should be
-    created once at process startup and reused for all requests — typically
+    created once at process startup and reused for all requests, typically
     as a FastAPI dependency or a module-level singleton.
     """
 

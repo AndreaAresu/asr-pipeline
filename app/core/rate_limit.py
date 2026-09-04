@@ -32,7 +32,7 @@ def probe_duration(path: str) -> float:
 
     Raises:
         HTTPException: 400 if ffprobe cannot determine a duration (e.g.
-            the file is corrupt or not actually a media file — the upload
+            the file is corrupt or not actually a media file, the upload
             extension check is by filename only, so this is where bogus
             content is caught).
     """

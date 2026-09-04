@@ -73,7 +73,7 @@ async def ui():
     """Serve the browser console.
 
     The UI is one self-contained HTML file served by the API itself, so
-    running the service is the only setup a user needs — no second
+    running the service is the only setup a user needs, no second
     process, no build step, and no host to configure, since the page
     calls the same origin that served it.
     """

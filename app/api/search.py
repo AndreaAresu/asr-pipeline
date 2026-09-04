@@ -83,7 +83,7 @@ async def search(request: SearchRequest, api_key: ApiKey = Depends(get_api_key))
 
     The query is embedded with the same sentence-transformers model used
     at index time, and ranked against stored chunk vectors by cosine
-    distance inside Postgres — the ordering and the LIMIT both happen in
+    distance inside Postgres, the ordering and the LIMIT both happen in
     the database, so only `top_k` rows come back.
 
     Args:
@@ -94,7 +94,7 @@ async def search(request: SearchRequest, api_key: ApiKey = Depends(get_api_key))
     Returns:
         The echoed query and its hits, ordered from most to least
         similar. An empty `hits` list means nothing has been indexed yet
-        (or nothing matched the transcript filter) — retrieval itself
+        (or nothing matched the transcript filter), retrieval itself
         always returns the nearest neighbours, however far away, so a low
         top score is the signal that a query is out of distribution.
 

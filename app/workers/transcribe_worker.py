@@ -1,7 +1,7 @@
 """RQ task that performs the actual transcription.
 
 Picked up by an RQ worker subscribed to the `transcribe` queue. Drives
-the `Job` row through its lifecycle (`queued` → `processing` → `done`
+the `Job` row through its lifecycle (`queued` -> `processing` -> `done`
 or `failed`) and, on success, stores the output in a `Transcript` row.
 """
 import os
@@ -41,7 +41,7 @@ def killing_signal(ret_val: object) -> int | None:
     """Extract the killing signal from a wait status, if there is one.
 
     RQ passes `None` on the paths where it noticed the death without
-    reaping a wait status, so the value cannot be assumed numeric — doing
+    reaping a wait status, so the value cannot be assumed numeric, doing
     the arithmetic unguarded raises, and the failure being reported is
     lost along with it.
     """
@@ -62,8 +62,8 @@ def termination_reason(signal_number: int | None) -> str:
 def handle_work_horse_killed(rq_job, retpid: int | None, ret_val: int | None, rusage) -> None:
     """Record a job whose work-horse died before it could report anything.
 
-    When the work-horse is killed outright — the OOM killer, SIGKILL, a
-    segfault in a native library — no Python inside it runs. The task's own
+    When the work-horse is killed outright (the OOM killer, SIGKILL, a
+    segfault in a native library) no Python inside it runs. The task's own
     `except` block never fires, so the row keeps claiming `processing` and
     a polling client waits forever on a job that is already dead.
 
@@ -72,7 +72,7 @@ def handle_work_horse_killed(rq_job, retpid: int | None, ret_val: int | None, ru
     precisely the process that just died. `Worker(work_horse_killed_handler=...)`
     runs here, in the parent, which survives.
 
-    Deliberately defensive — an exception raised here would be reported
+    Deliberately defensive, an exception raised here would be reported
     instead of the failure it is trying to record.
 
     Args:
@@ -92,7 +92,7 @@ def handle_work_horse_killed(rq_job, retpid: int | None, ret_val: int | None, ru
         db = SessionLocal()
         try:
             job = db.get(Job, job_id)
-            # Only claim the job if it never reached a terminal state — the
+            # Only claim the job if it never reached a terminal state, the
             # task's own handler is more specific, and wins when it ran.
             if job is not None and job.status not in ("done", "failed"):
                 job.status = "failed"
@@ -145,7 +145,7 @@ def index_chunks(db, transcript_id: str, segments: list[TranscriptSegment]) -> i
     Splits the Whisper segments into overlapping time windows, embeds all
     of them in a single batch (much faster than one call per chunk), and
     adds a `Chunk` row per window. The rows are added to `db` but not
-    committed — the caller commits them together with the job's final
+    committed, the caller commits them together with the job's final
     state, so a transcript is never marked `done` with a half-written
     index.
 
@@ -215,8 +215,8 @@ def transcribe_job(job_id: str, file_path: str, request_id: str | None = None) -
         if job is None:
             # The queue and the database can disagree: Redis holds the job,
             # Postgres holds the row, and nothing ties the two lifetimes
-            # together. A queue that outlives its database — a recreated
-            # volume, a restored dump — hands the worker an id with no row
+            # together. A queue that outlives its database (a recreated
+            # volume, a restored dump) hands the worker an id with no row
             # behind it. There is nothing to transcribe and nothing to mark
             # failed, so say so and stop; the `finally` still removes the
             # spooled file. Raising would only turn a stale queue entry into

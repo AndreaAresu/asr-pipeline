@@ -33,7 +33,7 @@ from app.core.logging import logger
 MARKER_INTERVAL = 30.0
 MAX_SECTIONS = 5
 
-# Roughly four characters per token, so this is ~10k tokens of transcript —
+# Roughly four characters per token, so this is ~10k tokens of transcript,
 # comfortably inside the Groq free tier's per-minute token budget, which a
 # multi-hour recording would otherwise blow straight through (a 4-hour
 # interview is ~40k words, ~60k tokens).
@@ -42,7 +42,7 @@ MAX_SECTIONS = 5
 # the first N characters would summarize only the opening and silently
 # report it as a summary of the whole thing. Dropping every Nth segment
 # instead keeps coverage across the full running time, at the cost of
-# detail — and the timestamps that survive are still real ones.
+# detail, and the timestamps that survive are still real ones.
 MAX_TRANSCRIPT_CHARS = 40_000
 
 SYSTEM_PROMPT = """\
@@ -135,7 +135,7 @@ def thin_segments(segments: list[Any], max_chars: int = MAX_TRANSCRIPT_CHARS) ->
         max_chars: Character budget for the rendered transcript.
 
     Returns:
-        `(segments, thinned)` — the original list and False when it
+        `(segments, thinned)`, the original list and False when it
         already fits.
     """
     total = sum(len(str(segment_field(s, "text"))) for s in segments)

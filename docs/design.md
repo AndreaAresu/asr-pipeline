@@ -10,16 +10,16 @@ header. Interactive docs are at `/docs`.
 
 | Endpoint | Request | Response |
 |---|---|---|
-| `POST /transcribe` | multipart `audio` file | `202` · `{job_id, status}` |
-| `GET /jobs` | — | recent jobs for this key, newest first |
-| `GET /jobs/{id}` | — | `{id, status, error_message, duration}` |
-| `GET /jobs/{id}/result` | — | `{transcript_id, full_text, language, segments}` |
+| `POST /transcribe` | multipart `audio` file | `202`, `{job_id, status}` |
+| `GET /jobs` | (none) | recent jobs for this key, newest first |
+| `GET /jobs/{id}` | (none) | `{id, status, error_message, duration}` |
+| `GET /jobs/{id}/result` | (none) | `{transcript_id, full_text, language, segments}` |
 | `POST /search` | `{query, top_k, transcript_id?}` | `{query, hits: [{transcript_id, start_sec, end_sec, text, score}]}` |
-| `POST /summarize/{transcript_id}` | — | `{transcript_id, cached, model, sections, meta}` |
-| `GET /health` | — | `{status: "ok"}` |
-| `GET /metrics` | — | Prometheus text format |
+| `POST /summarize/{transcript_id}` | (none) | `{transcript_id, cached, model, sections, meta}` |
+| `GET /health` | (none) | `{status: "ok"}` |
+| `GET /metrics` | (none) | Prometheus text format |
 
-`status` moves `queued → processing → done | failed`.
+`status` moves `queued` to `processing` to `done` or `failed`.
 
 Every response carries an `X-Request-Id`, and the same id appears in every
 log line the request produced **including the worker's**, so one id
@@ -28,15 +28,15 @@ reconstructs the whole journey across two processes.
 ### What ownership does and does not cover
 
 A job is readable only by the key that submitted it. Reading someone else's
-job returns **404, not 403** — with a body identical to a job that does not
+job returns **404, not 403**, with a body identical to a job that does not
 exist, so the endpoint cannot be used to probe which ids are real. The check
 runs before the `status` check too, or a foreign job would leak its status
 through a `400`.
 
 `/search` and `/summarize` check no such thing: any valid key can search the
-whole index and summarize any `transcript_id`. That is deliberate — it is
-what lets a visitor query a demo corpus their own key owns none of — but it
-is a property to know before pointing a second tenant at this.
+whole index and summarize any `transcript_id`. That is deliberate, and it is
+what lets a visitor query a demo corpus their own key owns none of, but it is
+a property to know before pointing a second tenant at this.
 
 ## Stack and trade-offs
 
@@ -59,8 +59,8 @@ Known and deliberate.
 - **Rate limiting is post-upload.** The quota check needs the file's
   duration, read with `ffprobe` after the bytes have landed. A caller over
   quota is rejected, but only after paying the upload. The size cap is the
-  exception and runs *while* the bytes arrive — buffering an arbitrary body
-  first is how you end up holding it in memory.
+  exception and runs *while* the bytes arrive, because buffering an arbitrary
+  body first is how you end up holding it in memory.
 - **The public demo is capped hard, in config rather than code.**
   `MAX_UPLOAD_MB=10` and `MAX_AUDIO_SECONDS=90` on the deployment. Both
   default permissive (500 MB, no duration limit) so indexing a long
@@ -72,12 +72,12 @@ Known and deliberate.
 - **The audio spool is a shared filesystem.** The API writes the upload where
   the worker reads it. That works under compose via a shared volume; across
   separate hosts it needs object storage, which is not implemented. It is
-  the reason the deployment is a single host — see [`deploy.md`](deploy.md).
+  the reason the deployment is a single host. See [`deploy.md`](deploy.md).
 - **English only.** `small.en` indexed the corpus, `base.en` runs the
   deployment. A multilingual model means changing `WHISPER_MODEL` and
   re-testing chunk quality; nothing else assumes English.
 - **CPU only.** No GPU path. 0.47x real time with `small.en` on Apple
-  Silicon, 0.4–0.7x with `base.en` on the VPS.
+  Silicon, 0.4-0.7x with `base.en` on the VPS.
 - **No streaming.** Transcription is batch; there is no partial-result API.
 - **No diarization.** No speaker labels.
 - **Sequential vector scan.** Exact and fast to ~10k chunks. An IVFFlat index

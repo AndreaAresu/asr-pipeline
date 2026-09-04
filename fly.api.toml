@@ -24,12 +24,12 @@ primary_region = "fra"
   HF_HOME = "/cache/huggingface"
   TEMP_AUDIO_DIR = "/var/spool/asr"
 
-# Secrets are never listed here — set them out of band, where they are
+# Secrets are never listed here, set them out of band, where they are
 # injected as env vars at runtime and stay out of version control:
 #   flyctl secrets set --app asr-api-andrea \
-#     DATABASE_URL="postgresql+psycopg://…" \
-#     REDIS_URL="rediss://…" \
-#     GROQ_API_KEY="…"
+#     DATABASE_URL="postgresql+psycopg://..." \
+#     REDIS_URL="rediss://..." \
+#     GROQ_API_KEY="..."
 
 [http_service]
   internal_port = 8080

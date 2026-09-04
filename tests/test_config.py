@@ -1,7 +1,7 @@
 """Tests for database URL resolution.
 
 The failure this guards against is a deploy-day one: managed Postgres
-providers hand out `postgres://…`, SQLAlchemy 2 needs the driver named,
+providers hand out `postgres://...`, SQLAlchemy 2 needs the driver named,
 and the resulting error surfaces far from its cause.
 """
 

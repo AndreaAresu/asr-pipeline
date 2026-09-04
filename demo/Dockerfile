@@ -33,7 +33,7 @@ EXPOSE 8501
 # headless: skip the "enter your email" prompt Streamlit shows on first run,
 # which would block the container at startup.
 # address 0.0.0.0: bind inside the container so compose can publish it. The
-# port is still bound to 127.0.0.1 on the host — Caddy is the only way in.
+# port is still bound to 127.0.0.1 on the host, Caddy is the only way in.
 #
 # maxUploadSize is set from MAX_UPLOAD_MB, the API's own cap, because
 # Streamlit prints its limit inside the file picker ("200MB per file" by

@@ -2,13 +2,13 @@
 #
 # Latency benchmark for the three user-facing operations.
 #
-#   ASR_API_KEY=<key> bash scripts/benchmark.sh [audio_file …]
+#   ASR_API_KEY=<key> bash scripts/benchmark.sh [audio_file ...]
 #
 # Each measurement is repeated REPEATS times and reported as P50 and P95,
 # because a single run of a queue-backed system tells you very little: the
 # first call pays for model loading, and the worker's queue wait varies.
 #
-# Needs `jq` and `python3` on the machine you run this from — not on the
+# Needs `jq` and `python3` on the machine you run this from, not on the
 # server. Neither is in the API image, so on a fresh VPS `jq` is one
 # `apt-get install` away and the script dies on the first row without it.
 #
@@ -18,7 +18,7 @@
 #   REPEATS      samples per measurement (default 3)
 #
 # Paste the resulting table into the README's Performance section, and say
-# what hardware produced it — numbers without a machine attached are noise.
+# what hardware produced it, numbers without a machine attached are noise.
 
 set -euo pipefail
 
@@ -37,7 +37,7 @@ fi
 now() { python3 -c 'import time; print(time.time())'; }
 
 # P50/P95 over the samples on stdin. With few samples P95 is effectively
-# the worst observed run — which is the honest reading, not a smoothed one.
+# the worst observed run, which is the honest reading, not a smoothed one.
 percentiles() {
   python3 -c '
 import sys
@@ -59,14 +59,14 @@ echo
 row "operation" "P50 (s)" "P95 (s)" "samples"
 printf "|%s|%s|%s|%s|\n" "------------------------------------" "----------" "----------" "---------"
 
-# --- transcribe: upload → status done ---------------------------------
+# --- transcribe: upload -> status done ---------------------------------
 LAST_TRANSCRIPT=""
 for audio in "${AUDIO_FILES[@]}"; do
   [[ -f "$audio" ]] || { echo "missing: $audio" >&2; continue; }
   # The label's duration comes from the API, not from a local ffprobe. The
   # benchmark is normally run against a deployment from a machine that is
   # not the deployment, and ffprobe lives inside the image rather than on
-  # the host — so probing locally silently produced 0, and every row came
+  # the host, so probing locally silently produced 0, and every row came
   # out labelled "0s audio". /jobs/{id} reports the duration the service
   # actually measured, which is the honest number for the label anyway.
   seconds=0
