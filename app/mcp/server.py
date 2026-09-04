@@ -51,7 +51,7 @@ from app.db.session import SessionLocal
 # What the curated corpus actually is, stated once and quoted into the tool
 # descriptions. A model that does not know what the corpus covers cannot
 # tell "this question is out of scope" from "retrieval failed".
-CORPUS = (
+CORPUS_DESCRIPTION = (
     "The curated corpus is three public-domain episodes of NASA's "
     "'Houston We Have a Podcast' (Apollo 11, the Gateway lunar station, and a NASA "
     "microbiologist), about 19-24 minutes each, in English, indexed as 109 passages."
@@ -59,14 +59,14 @@ CORPUS = (
 
 # Chunking targets 45-second windows with 10 seconds of overlap; measured on
 # the deployed corpus the passages run 12-72 seconds, median 47.
-PASSAGE_LENGTH = "about 45 seconds of speech"
+PASSAGE_LENGTH_TEXT = "about 45 seconds of speech"
 
 mcp = MCPServer(
     "asr-pipeline",
     version="0.1.0",
     instructions=(
         "Semantic search over audio transcripts produced by this pipeline. "
-        f"{CORPUS} Start with list_transcripts to see what is available, use "
+        f"{CORPUS_DESCRIPTION} Start with list_transcripts to see what is available, use "
         "search_transcripts to find where something is discussed, and "
         "fetch_transcript_window to read the surrounding text before quoting it. "
         "Note the asymmetry: search covers the whole index, including recordings "
@@ -95,7 +95,7 @@ def _headers(ctx: Context) -> dict[str, str]:
 
 LIST_DESCRIPTION = (
     "List the transcripts in the curated corpus: what this index can be asked about. "
-    f"{CORPUS} "
+    f"{CORPUS_DESCRIPTION} "
     "Each entry gives the transcript_id to pass to the other tools, the source audio "
     "filename to cite, the duration in seconds and as mm:ss, the language, and how many "
     "indexed passages it holds. "
@@ -133,14 +133,14 @@ MAX_TOOL_HITS = 10
 
 SEARCH_DESCRIPTION = (
     "Find where something is discussed in the indexed transcripts, by meaning rather than by keyword. "
-    f"Returns PASSAGES - {PASSAGE_LENGTH} each - not whole transcripts: quote them as excerpts, and use "
+    f"Returns PASSAGES - {PASSAGE_LENGTH_TEXT} each - not whole transcripts: quote them as excerpts, and use "
     "fetch_transcript_window to read what surrounds one before relying on it. "
     "Each hit carries the source filename and mm:ss times, so it can be cited directly. "
     "Scores are cosine similarity in [-1, 1]. A hit under 0.30 comes back marked below_threshold, not "
     f"removed: {MIN_RELEVANT_SCORE} is the measured noise floor for this corpus, so say 'the closest passage "
     "was X, which does not really answer this' rather than concluding the corpus is silent on the subject. "
     "This searches the WHOLE index, which includes recordings uploaded by visitors to the public demo, "
-    f"not only the curated corpus that list_transcripts shows. {CORPUS}"
+    f"not only the curated corpus that list_transcripts shows. {CORPUS_DESCRIPTION}"
 )
 
 
