@@ -11,9 +11,9 @@ timestamped sections.
 key. Search 67 minutes of indexed NASA podcasts, or upload your own clip and
 watch it go through. Also live: the [API and its browser
 console](https://api.159-195-250-205.sslip.io), with [OpenAPI
-docs](https://api.159-195-250-205.sslip.io/docs). The same retrieval is also
-[**exposed to an assistant over MCP**](#ask-a-model-instead-of-a-search-box),
-as three tools.
+docs](https://api.159-195-250-205.sslip.io/docs), and an
+[**MCP endpoint**](#ask-a-model-instead-of-a-search-box) that hands the same
+retrieval to an assistant as three tools.
 
 ![Semantic search over the indexed corpus](docs/img/search.jpg)
 
@@ -144,23 +144,25 @@ answer with the recording and the timestamp it read.
     "asr-pipeline": {
       "type": "http",
       "url": "https://api.159-195-250-205.sslip.io/mcp",
-      "headers": { "X-API-Key": "REPLACE_WITH_DEMO_KEY" }
+      "headers": { "X-API-Key": "04l-JpnSG5IDxvMVgnGjnjOS-7_G-biptXKDy1sJLqE" }
     }
   }
 }
 ```
 
-> **Not live yet, and the demo key is not published here yet.** The endpoint
-> ships with this change; until it is deployed and a key is issued, run the
-> stack locally (see [Run it](#run-it)), mint one with
-> `docker compose exec api python -m scripts.create_api_key mcp-demo 10`, and
-> point the config at `http://localhost:8080/mcp`.
+That key is real, public on purpose, and quota-limited to 10 audio minutes a
+day. It is separate from the one behind the Streamlit demo so it can be
+revoked on its own; if it ever is, run the stack locally (see
+[Run it](#run-it)), mint your own with
+`docker compose exec api python -m scripts.create_api_key mcp-demo 10`, and
+point the config at `http://localhost:8080/mcp`.
 
 For Claude Code that block goes in `.mcp.json`, or in one command:
 
 ```bash
 claude mcp add --transport http asr-pipeline \
-  https://api.159-195-250-205.sslip.io/mcp -H "X-API-Key: $KEY"
+  https://api.159-195-250-205.sslip.io/mcp \
+  -H "X-API-Key: 04l-JpnSG5IDxvMVgnGjnjOS-7_G-biptXKDy1sJLqE"
 ```
 
 `Authorization: Bearer <key>` is accepted as well, for clients that can only
@@ -190,8 +192,8 @@ quotable.
 
 ### What it looks like
 
-**"Was DNA ever sequenced in space?"** The tool output below is real, taken
-from the indexed corpus; the arrangement is the sequence a model follows.
+**"Was DNA ever sequenced in space?"** The tool output below is real, from
+the live endpoint above; the arrangement is the sequence a model follows.
 
 **1. `search_transcripts({"query": "DNA sequencing on the space station"})`**
 
@@ -236,10 +238,18 @@ nothing consuming a hit can reach it.
   `fetch_transcript_window` exists.
 - **Caps.** Ten passages per search, five minutes per window. Over the window
   cap the call is refused with a message rather than trimmed in silence.
-- **Nothing counts a search.** The only quota in this system is in audio
-  minutes and applies to `/transcribe`, so it does not limit anything the
-  three tools do. That was fine while a human was clicking; an agent calls in
-  a loop.
+- **Nothing counts a search, and that is a decision, not an oversight.** The
+  only quota in this system is in audio minutes and applies to `/transcribe`,
+  so it bounds nothing the three tools do. Measured on the deployed box
+  before publishing the key: a search costs **25 ms P50** in-process, of
+  which **15 ms is embedding the query and 4.5 ms is the pgvector scan**, and
+  during a live transcription on the same 4-core machine it degrades to
+  ~279 ms P50 with an 783 ms tail (measured over the internet, against 239 ms
+  idle). At that price a looping agent is a nuisance, not a threat, and the
+  key can be revoked in one statement. Capping `top_k` would be the wrong
+  guard anyway, since the scan is the cheap half; if one is ever needed it
+  has to count *queries* per key. Details in
+  [`docs/performance.md`](docs/performance.md).
 
 ## Run it
 

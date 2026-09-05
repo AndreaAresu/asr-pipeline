@@ -16,6 +16,32 @@ the public demo runs, because a visitor is waiting.
 | `POST /summarize`, cache miss | 1.6 s | n/a | 1 |
 | `POST /summarize`, cache hit | 37 ms | 38 ms | 3 |
 
+### What a search costs, and why nothing counts them
+
+Measured 2026-09-04, before publishing an API key in the README, to decide
+whether searching needs a quota of its own. It does not, yet, and this is the
+number that says so.
+
+| Measurement | Result |
+|---|---|
+| `POST /search`, top_k=5, on the box, same query 20x warm | **25 ms P50**, 58 ms P95 |
+| ...of which embedding the query | **15.3 ms** median |
+| ...of which the pgvector scan over 111 chunks | **4.5 ms** median |
+| Same call from a laptop over the internet | 239 ms P50, 283 ms P95 |
+| ...while the worker transcribed a 30 s clip | 279 ms P50, 783 ms max |
+
+Read this way: **the embedding dominates, three to one over the scan.** That
+rules out the guard that first comes to mind: capping `top_k` limits the
+cheap half. A real defence would have to count *queries* per key.
+
+And the cost is small enough not to need one. A search is 25 ms of CPU, so an
+agent looping flat out occupies a fraction of one of four cores, and search
+under a concurrent transcription slows by roughly a sixth rather than
+collapsing. The published key is revocable on its own, which was verified by
+creating a throwaway key, revoking it, and watching the Streamlit demo carry
+on unaffected. Revisit this if the corpus grows by an order of magnitude: the
+scan is sequential, so it is the half that grows with the index.
+
 Two numbers that are easy to guess wrong:
 
 - **Cold start costs 4.5 s, not 30.** The first job after a worker restart
