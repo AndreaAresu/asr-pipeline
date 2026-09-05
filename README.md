@@ -190,37 +190,55 @@ around it: the model would get five passages identified by a UUID, with no way
 to know what the index holds and no way to widen a hit into something
 quotable.
 
-### What it looks like
+### A real conversation
 
-**"Was DNA ever sequenced in space?"** The tool output below is real, from
-the live endpoint above; the arrangement is the sequence a model follows.
+Claude Code, connected with the block above and nothing else, asked one
+question. Verbatim exchange, translated from Italian; the quoted passages are
+the tool output word for word.
 
-**1. `search_transcripts({"query": "DNA sequencing on the space station"})`**
+> **"What is in this corpus, and where does it talk about DNA sequencing?"**
+>
+> *Called asr-pipeline 3 times*
 
-```json
-{
-  "audio_filename": "nasa-microbiologist.mp3",
-  "start": "9:41", "end": "10:26",
-  "score": 0.684, "below_threshold": false,
-  "text": "... And you got to do some of the first things, like sequencing DNA.
-           That was a big one because you were the first person to sequence DNA ..."
-}
-```
+Three calls, chosen by the model with no instruction beyond the question -
+it announced it would list the corpus and search it in parallel. What came
+back:
 
-**2. `fetch_transcript_window({"transcript_id": "...", "start_sec": 541, "end_sec": 666})`**
-returns `8:57`-`11:07` whole, which is where the number lives:
+> **What is in the corpus.** Three public-domain episodes of NASA's *Houston
+> We Have a Podcast*, in English, 109 indexed passages: `nasa-apollo11.mp3`
+> (19:00, 31 passages), `nasa-gateway.mp3` (24:21, 40), and
+> `nasa-microbiologist.mp3` (23:31, 38).
+>
+> Note: the search index also contains recordings uploaded by visitors to the
+> public demo, but the curated corpus is only this.
+>
+> **Where DNA sequencing is discussed.** All of it in
+> `nasa-microbiologist.mp3`, in one continuous block between ~9:40 and
+> ~12:10.
+>
+> **9:41-10:26** - the first DNA sequencing in space:
+> *"And you got to do some of the first things, like sequencing DNA. That was
+> a big one because you were the first person to sequence DNA. [...] This was
+> a technology that we were trying to prove if it would work in microgravity.
+> We didn't know."*
+>
+> **10:16-11:03** - the result, over two billion base pairs:
+> *"We were able to demonstrate that we could do it. [...] How many billions
+> of base pairs can we get to? I think we sequenced a little bit over two
+> billion base pairs."*
+>
+> **10:51-12:13** - what comes next, multiplexing with molecular barcodes.
+>
+> Related context, not sequencing proper: **4:13-5:06**, fieldwork in Africa
+> on monkeypox and Ebola (thematic relevance only, score just above the 0.30
+> noise floor).
 
-```text
-... And we were able to demonstrate that we could do it ... I think we
-sequenced a little bit over two billion base pairs.
-```
-
-**3. The answer, citable:** yes, aboard the ISS, and over two billion base
-pairs of it, `nasa-microbiologist.mp3` at 9:41.
-
-The filename and the `mm:ss` are on the hit itself, because a UUID and a
-float are not a citation, and the recording's name lives two joins away where
-nothing consuming a hit can reach it.
+Three things in that answer came from the tool descriptions rather than from
+the model's own knowledge, and they are the reason this is not a `POST` with
+a JSON schema around it. It knew the corpus was a corpus and said what was in
+it. It warned, unprompted, that search reaches further than the listing. And
+it flagged the weak hit **as** weak instead of presenting it beside the good
+ones, because the hit arrived marked rather than filtered out.
 
 ### The uncomfortable parts, stated
 
