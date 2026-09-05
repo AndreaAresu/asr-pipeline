@@ -58,7 +58,18 @@ transcription and search work without it, and `/summarize` returns 503.
    are scoped to the key that submitted the job.
 4. `app/api/search.py`: embeds the query **in the API process** and ranks
    chunks by pgvector cosine distance, ordering and limiting inside Postgres.
+   The ranking itself lives in `app/core/retrieval.py`, which the MCP tools
+   call too.
 5. `app/api/summarize.py`: cache-first, so only a miss calls the LLM.
+6. `app/api/transcripts.py`: lists the curated corpus, and reads one
+   transcript over a time interval. Both are thin wrappers over
+   `app/core/retrieval.py`.
+7. `app/mcp/`: the same three capabilities as MCP tools, on the `/mcp` route
+   appended to `app.router.routes` in `app/main.py`. It is **not** a FastAPI
+   route, so `Depends(get_api_key)` cannot reach it: `ApiKeyGate` in
+   `app/mcp/asgi.py` is what protects it, and what stamps the route label the
+   metrics middleware reads. The session manager runs from the app lifespan;
+   without that the first MCP message fails on an uninitialised task group.
 
 ## Invariants that are easy to break
 
@@ -129,6 +140,15 @@ transcription and search work without it, and `/summarize` returns 503.
   because the real column is the SHA-256 of a working key and must not reach
   a public repo. Rows are ordered so the output is reproducible, and
   `--check` asserts that against the committed file.
+- **That `seed` literal is now load-bearing**, and no longer only a
+  precaution. `GET /transcripts` and the `list_transcripts` MCP tool show
+  exactly the jobs carrying it (`CURATED_CORPUS_MARKER` in
+  `app/core/retrieval.py`), which is how a stranger's upload stays out of a
+  listing while remaining findable by `/search`. Two consequences: changing
+  the literal in `scripts/dump_seed.sh` silently empties the listing, and a
+  development database that transcribed the NASA episodes itself lists
+  nothing, because its rows carry a real key hash. Only a database restored
+  from the dump has a curated corpus.
 
 ## The test trap that only fails in CI
 
