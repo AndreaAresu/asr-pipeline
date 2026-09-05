@@ -200,9 +200,17 @@ the tool output word for word.
 >
 > *Called asr-pipeline 3 times*
 
-Three calls, chosen by the model with no instruction beyond the question -
-it announced it would list the corpus and search it in parallel. What came
-back:
+Three calls, chosen by the model with no instruction beyond the question:
+
+1. `list_transcripts`, to find out what it was about to search.
+2. `search_transcripts(query: "DNA sequencing, genome sequencing of
+   microbes", top_k: 8)` - its own phrasing rather than the user's words, and
+   its own `top_k`.
+3. `fetch_transcript_window(start_sec: 540, end_sec: 740)` on the transcript
+   the hits pointed at, to read the passage whole before quoting it. The
+   server widened that to 8:57-12:21, the enclosing segment boundaries.
+
+What came back:
 
 > **What is in the corpus.** Three public-domain episodes of NASA's *Houston
 > We Have a Podcast*, in English, 109 indexed passages: `nasa-apollo11.mp3`
@@ -213,8 +221,7 @@ back:
 > public demo, but the curated corpus is only this.
 >
 > **Where DNA sequencing is discussed.** All of it in
-> `nasa-microbiologist.mp3`, in one continuous block between ~9:40 and
-> ~12:10.
+> `nasa-microbiologist.mp3`, in one block running 9:41 to 12:13.
 >
 > **9:41-10:26** - the first DNA sequencing in space:
 > *"And you got to do some of the first things, like sequencing DNA. That was
@@ -227,18 +234,22 @@ back:
 > of base pairs can we get to? I think we sequenced a little bit over two
 > billion base pairs."*
 >
-> **10:51-12:13** - what comes next, multiplexing with molecular barcodes.
+> **10:51-11:38** - what comes next, multiplexing with molecular barcodes.
 >
-> Related context, not sequencing proper: **4:13-5:06**, fieldwork in Africa
-> on monkeypox and Ebola (thematic relevance only, score just above the 0.30
-> noise floor).
+> Passing mentions: **0:30-1:21**, the episode intro announcing the theme;
+> and **3:33-5:06**, earlier fieldwork in Africa on monkeypox and Ebola -
+> biology, but not sequencing. Those passages are below the relevance
+> threshold (score < 0.30) for this query.
+>
+> The Apollo 11 and Gateway episodes contain nothing on the topic.
 
 Three things in that answer came from the tool descriptions rather than from
 the model's own knowledge, and they are the reason this is not a `POST` with
 a JSON schema around it. It knew the corpus was a corpus and said what was in
 it. It warned, unprompted, that search reaches further than the listing. And
-it flagged the weak hit **as** weak instead of presenting it beside the good
-ones, because the hit arrived marked rather than filtered out.
+it separated the weak hits from the good ones instead of presenting eight
+results as eight answers: only two of the eight cleared the floor, at 0.36
+and 0.33, and the other six arrived carrying `below_threshold: true`.
 
 ### The uncomfortable parts, stated
 
